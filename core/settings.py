@@ -92,6 +92,9 @@ CSRF_TRUSTED_ORIGINS = ['https://*.onrender.com']
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
+AUTH_USER_MODEL = 'accounts.CustomUser'
+
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
