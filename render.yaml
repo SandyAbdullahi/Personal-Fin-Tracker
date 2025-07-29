@@ -4,7 +4,6 @@ services:
     env: python
     buildCommand: |
       pip install -r requirements.txt
-      python manage.py migrate
     startCommand: bash -c "python manage.py migrate && gunicorn core.wsgi:application"
     envVars:
       - key: DJANGO_SETTINGS_MODULE
