@@ -8,6 +8,8 @@ services:
       - key: DJANGO_SETTINGS_MODULE
         value: core.settings
       - key: SECRET_KEY
-        value: your-secret-key
+        sync: false
       - key: DEBUG
-        value: False
+        sync: false
+      - key: DATABASE_URL
+        sync: false
