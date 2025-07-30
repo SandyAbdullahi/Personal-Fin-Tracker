@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Transaction, Category
+from .models import Transaction, Category, SavingsGoal
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -21,3 +21,11 @@ class TransactionSerializer(serializers.ModelSerializer):
             'category', 'category_id', 'date', 'note'
         ]
         read_only_fields = ['user']
+
+class SavingsGoalSerializer(serializers.ModelSerializer):
+    amount_saved = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    class Meta:
+        model  = SavingsGoal
+        fields = ['id', 'name', 'target_amount', 'deadline', 'amount_saved', 'created_at']
+        read_only_fields = ['created_at']

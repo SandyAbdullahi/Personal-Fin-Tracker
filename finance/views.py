@@ -1,52 +1,108 @@
+from django.db.models import Sum
 from rest_framework import viewsets, permissions
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import Transaction, Category
-from .serializers import TransactionSerializer, CategorySerializer
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from django.db.models import Sum
+from .models import Category, Transaction, SavingsGoal
+from .serializers import (
+    CategorySerializer,
+    TransactionSerializer,
+    SavingsGoalSerializer
+)
 
 
+# ────────────────────────────────────────────────
+#   Category CRUD
+# ────────────────────────────────────────────────
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [permissions.IsAuthenticated]
 
 
+# ────────────────────────────────────────────────
+#   Transaction CRUD (user-scoped)
+# ────────────────────────────────────────────────
 class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filterset_fields = ['type', 'category', 'date']  # gives ?type=EX&category=1&date=2025-07-29
+
+    # Enable query-param filters (?type=EX&category=1&date=2025-07-30)
+    filterset_fields = ["type", "category", "date"]
 
     def get_queryset(self):
+        # Only the current user’s transactions
         return self.request.user.transactions.all()
+
+    def perform_create(self, serializer):
+        # Auto-attach user on POST
+        serializer.save(user=self.request.user)
+
+
+# ────────────────────────────────────────────────
+#   Savings Goal CRUD (user-scoped)
+# ────────────────────────────────────────────────
+class SavingsGoalViewSet(viewsets.ModelViewSet):
+    serializer_class = SavingsGoalSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return self.request.user.goals.all()
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
+# ────────────────────────────────────────────────
+#   Finance Summary Endpoint
+# ────────────────────────────────────────────────
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
 def summary(request):
+    """
+    Returns total income, total expenses, per-category totals,
+    and savings-goal progress for the authenticated user.
+
+    Optional query params:
+      ?start=YYYY-MM-DD   filter transactions from this date
+      ?end=YYYY-MM-DD     filter up to this date
+    """
     qs = request.user.transactions.all()
 
-    start = request.GET.get('start')
-    end = request.GET.get('end')
-    if start: qs = qs.filter(date__gte=start)
-    if end:   qs = qs.filter(date__lte=end)
+    start = request.GET.get("start")
+    end = request.GET.get("end")
+    if start:
+        qs = qs.filter(date__gte=start)
+    if end:
+        qs = qs.filter(date__lte=end)
 
-    income_total = qs.filter(type='IN').aggregate(total=Sum('amount'))['total'] or 0
-    expense_total = qs.filter(type='EX').aggregate(total=Sum('amount'))['total'] or 0
+    income_total = qs.filter(type="IN").aggregate(t=Sum("amount"))["t"] or 0
+    expense_total = qs.filter(type="EX").aggregate(t=Sum("amount"))["t"] or 0
 
     by_category = (
-        qs.values('category__name')
-        .annotate(total=Sum('amount'))
-        .order_by('-total')
+        qs.values(name="category__name")  # alias for cleaner JSON
+          .annotate(total=Sum("amount"))
+          .order_by("-total")
     )
 
-    return Response({
-        "income_total": income_total,
-        "expense_total": expense_total,
-        "by_category": list(by_category)
-    })
+    goal_data = [
+        {
+            "id": g.id,
+            "name": g.name,
+            "target": g.target_amount,
+            "saved": g.amount_saved,
+            "percent": round((g.amount_saved / g.target_amount) * 100, 1)
+                       if g.target_amount else 0,
+            "deadline": g.deadline,
+        }
+        for g in request.user.goals.all()
+    ]
+
+    return Response(
+        {
+            "income_total": income_total,
+            "expense_total": expense_total,
+            "by_category": list(by_category),
+            "goals": goal_data,
+        }
+    )

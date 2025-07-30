@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from accounts.models import CustomUser
 
 
@@ -23,3 +24,24 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.get_type_display()} - {self.amount}"
+
+
+class SavingsGoal(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="goals")
+    name = models.CharField(max_length=100)
+    target_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    deadline = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    # optional convenience
+    @property
+    def amount_saved(self):
+        total = (
+                self.user.transactions
+                .filter(type='IN', category__name='Savings', date__lte=timezone.now().date())
+                .aggregate(models.Sum('amount'))['amount__sum'] or 0
+        )
+        return total
+
+    def __str__(self):
+        return f"{self.name} ({self.user.email})"
