@@ -7,6 +7,7 @@ import django_heroku
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+DATABASE_URL = config('DATABASE_URL', default=None)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -88,10 +89,10 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Database
 
 DATABASES = {
-    'default': dj_database_url.config(
-        env='DATABASE_URL',  # << explicit; avoids falling back to localhost
-        conn_max_age=600,    # optional persistent connections
-        ssl_require=True,    # Render PG requires SSL
+    'default': dj_database_url.parse(
+        config('DATABASE_URL'),         # pulls from .env in dev, from real env in Render
+        conn_max_age=600,
+        ssl_require=not config('DEBUG', cast=bool)  # SSL only in production
     )
 }
 
