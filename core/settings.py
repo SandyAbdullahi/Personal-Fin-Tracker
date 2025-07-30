@@ -89,7 +89,9 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 DATABASES = {
     'default': dj_database_url.config(
-        default=config('DATABASE_URL')  # Render will inject this
+        env='DATABASE_URL',  # << explicit; avoids falling back to localhost
+        conn_max_age=600,    # optional persistent connections
+        ssl_require=True,    # Render PG requires SSL
     )
 }
 
