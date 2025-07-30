@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Auth Tester</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 2rem; }
+    input, button { display: block; margin-top: 10px; padding: 8px; width: 100%; }
+    pre { background: #f0f0f0; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Login</h2>
+  <input type="email" id="email" placeholder="Email">
+  <input type="password" id="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+
+  <h3>Token Response:</h3>
+  <pre id="tokens"></pre>
+
+  <h3>Fetch /me/ with Token</h3>
+  <button onclick="fetchMe()">Get My Info</button>
+  <pre id="me"></pre>
+
+  <script>
+    let accessToken = "";
+
+    function login() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      fetch("http://127.0.0.1:8000/api/auth/login/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      })
+      .then(res => res.json())
+      .then(data => {
+        accessToken = data.access;
+        document.getElementById("tokens").textContent = JSON.stringify(data, null, 2);
+      });
+    }
+
+    function fetchMe() {
+      if (!accessToken) {
+        alert("Please login first.");
+        return;
+      }
+
+      fetch("http://127.0.0.1:8000/api/auth/me/", {
+        headers: {
+          "Authorization": "Bearer " + accessToken
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById("me").textContent = JSON.stringify(data, null, 2);
+      });
+    }
+  </script>
+</body>
+</html>
