@@ -2,9 +2,21 @@ services:
   - type: web
     name: personal-fin-tracker
     env: python
+
     buildCommand: |
       pip install -r requirements.txt
-    startCommand: bash -c "python manage.py migrate && gunicorn core.wsgi:application"
+      # collectstatic here later if you need it
+
+    startCommand: |
+      # Unbuffered stdout so you SEE the migrate logs
+      PYTHONUNBUFFERED=1 \
+      sh -c "
+        echo '--- running migrations ---' &&
+        python manage.py migrate --noinput &&
+        echo '--- starting gunicorn ---' &&
+        gunicorn core.wsgi:application
+      "
+
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: core.settings
