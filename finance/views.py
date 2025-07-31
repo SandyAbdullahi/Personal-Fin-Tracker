@@ -1,4 +1,4 @@
-from django.db.models import Sum
+from django.db.models import Sum, F
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -80,9 +80,9 @@ def summary(request):
     expense_total = qs.filter(type="EX").aggregate(t=Sum("amount"))["t"] or 0
 
     by_category = (
-        qs.values(name="category__name")  # alias for cleaner JSON
-          .annotate(total=Sum("amount"))
-          .order_by("-total")
+        qs.values(name=F("category__name"))  # ← valid expression alias
+        .annotate(total=Sum("amount"))
+        .order_by("-total")
     )
 
     goal_data = [
