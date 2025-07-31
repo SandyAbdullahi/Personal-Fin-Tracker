@@ -8,6 +8,7 @@ pip install -r requirements-dev.txt
 
 echo "▶️  Running flake8"
 black .
+flake8 .
 
 echo "▶️  Running pytest"
 pytest -q
