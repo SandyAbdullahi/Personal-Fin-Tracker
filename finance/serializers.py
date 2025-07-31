@@ -5,27 +5,43 @@ from .models import Transaction, Category, SavingsGoal
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ['id', 'name']
+        fields = ["id", "name"]
 
 
 class TransactionSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
-        queryset=Category.objects.all(), source='category', write_only=True
+        queryset=Category.objects.all(), source="category", write_only=True
     )
 
     class Meta:
         model = Transaction
         fields = [
-            'id', 'user', 'amount', 'type',
-            'category', 'category_id', 'date', 'note'
+            "id",
+            "user",
+            "amount",
+            "type",
+            "category",
+            "category_id",
+            "date",
+            "note",
         ]
-        read_only_fields = ['user']
+        read_only_fields = ["user"]
+
 
 class SavingsGoalSerializer(serializers.ModelSerializer):
-    amount_saved = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    amount_saved = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
 
     class Meta:
-        model  = SavingsGoal
-        fields = ['id', 'name', 'target_amount', 'deadline', 'amount_saved', 'created_at']
-        read_only_fields = ['created_at']
+        model = SavingsGoal
+        fields = [
+            "id",
+            "name",
+            "target_amount",
+            "deadline",
+            "amount_saved",
+            "created_at",
+        ]
+        read_only_fields = ["created_at"]

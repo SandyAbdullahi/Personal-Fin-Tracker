@@ -7,6 +7,8 @@ from .views import (
     summary,
 )
 
+app_name = "finance"  # 👈  <-- add or confirm this line
+
 router = DefaultRouter()
 router.register(r"categories", CategoryViewSet, basename="categories")
 router.register(r"transactions", TransactionViewSet, basename="transactions")
@@ -14,5 +16,5 @@ router.register(r"goals", SavingsGoalViewSet, basename="goals")
 
 urlpatterns = [
     path("", include(router.urls)),
-    path("summary/", summary, name="finance-summary"),
+    path("summary/", summary, name="summary"),
 ]

@@ -11,11 +11,13 @@ class Category(models.Model):
 
 
 class Transaction(models.Model):
-    INCOME = 'IN'
-    EXPENSE = 'EX'
-    TYPE_CHOICES = [(INCOME, 'Income'), (EXPENSE, 'Expense')]
+    INCOME = "IN"
+    EXPENSE = "EX"
+    TYPE_CHOICES = [(INCOME, "Income"), (EXPENSE, "Expense")]
 
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='transactions')
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, related_name="transactions"
+    )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     type = models.CharField(max_length=2, choices=TYPE_CHOICES)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True)
@@ -37,9 +39,10 @@ class SavingsGoal(models.Model):
     @property
     def amount_saved(self):
         total = (
-                self.user.transactions
-                .filter(type='IN', category__name='Savings', date__lte=timezone.now().date())
-                .aggregate(models.Sum('amount'))['amount__sum'] or 0
+            self.user.transactions.filter(
+                type="IN", category__name="Savings", date__lte=timezone.now().date()
+            ).aggregate(models.Sum("amount"))["amount__sum"]
+            or 0
         )
         return total
 

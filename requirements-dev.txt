@@ -1,0 +1,7 @@
+# requirements-dev.txt  (keep prod deps in requirements.txt)
+pytest
+pytest-django
+pytest-cov
+flake8
+flake8-bugbear          # nicer warnings
+black                   # optional: auto-formatter

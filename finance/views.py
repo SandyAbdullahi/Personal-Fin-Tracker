@@ -7,7 +7,7 @@ from .models import Category, Transaction, SavingsGoal
 from .serializers import (
     CategorySerializer,
     TransactionSerializer,
-    SavingsGoalSerializer
+    SavingsGoalSerializer,
 )
 
 
@@ -91,8 +91,11 @@ def summary(request):
             "name": g.name,
             "target": g.target_amount,
             "saved": g.amount_saved,
-            "percent": round((g.amount_saved / g.target_amount) * 100, 1)
-                       if g.target_amount else 0,
+            "percent": (
+                round((g.amount_saved / g.target_amount) * 100, 1)
+                if g.target_amount
+                else 0
+            ),
             "deadline": g.deadline,
         }
         for g in request.user.goals.all()
