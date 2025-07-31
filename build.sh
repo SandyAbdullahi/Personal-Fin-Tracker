@@ -5,7 +5,8 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
 # Lint only project code (option A) …
-flake8 --exclude=.venv .
+#flake8 --exclude=.venv .
+flake8 --config=.flake8 .
 
 # …or, after adding .flake8 (option B):
 #flake8 .
