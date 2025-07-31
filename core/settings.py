@@ -82,10 +82,10 @@ WSGI_APPLICATION = "core.wsgi.application"
 # Database
 
 DATABASES = {
-    "default": dj_database_url.parse(
-        config("DATABASE_URL"),  # pulls from .env in dev, from real env in Render
+    "default": dj_database_url.config(
+        env="INTERNAL_DATABASE_URL",  # <- pick up Render’s secret
         conn_max_age=600,
-        ssl_require=not config("DEBUG", cast=bool),  # SSL only in production
+        ssl_require=True,
     )
 }
 DATABASES["default"]["TEST"] = {
