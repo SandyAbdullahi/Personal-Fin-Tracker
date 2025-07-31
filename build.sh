@@ -10,7 +10,9 @@ pip install -r requirements-dev.txt
 # …or, after adding .flake8 (option B):
 flake8 .
 
-pytest -q
+echo "▶️  Running unit/integration tests"
+pytest --cov=finance --cov=accounts --cov-report=term-missing -q
+
 
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
