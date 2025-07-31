@@ -1,18 +1,16 @@
-# build.sh  (repo root)  ← new executable file
 #!/usr/bin/env bash
-set -e  # exit immediately on ANY error
+set -e
 
-echo "▶️  Installing prod + dev dependencies"
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
-echo "▶️  Running flake8"
-black .
+# Lint only project code (option A) …
+# flake8 --exclude=.venv .
+
+# …or, after adding .flake8 (option B):
 flake8 .
 
-echo "▶️  Running pytest"
 pytest -q
 
-echo "✅  Test suite green — continue to Django build steps"
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
