@@ -1,14 +1,4 @@
 [flake8]
-# add to the built-in list
-extend-exclude =
-    .venv,
-    */migrations/*,
-    __pycache__,
-    build,
-    dist,
-    static
-
-max-line-length = 119
-extend-ignore = B950, W503
-per-file-ignores =
-    __init__.py: F401
+max-line-length = 88
+extend-ignore = E203
+select = B,C,E,F,W,T4,B9
