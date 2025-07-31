@@ -3,7 +3,7 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import Category, Transaction, SavingsGoal
+from .models import Category
 from .serializers import (
     CategorySerializer,
     TransactionSerializer,
