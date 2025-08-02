@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -e
+set -x
+
+echo "🔍 Listing databases in the cluster to verify connectivity…"
 psql -c '\l'
 #psql "$DATABASE_URL" -c '\dt'
 
