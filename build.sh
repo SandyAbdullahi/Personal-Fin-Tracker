@@ -3,7 +3,7 @@ set -e
 set -x
 
 echo "🔍 Listing databases in the cluster to verify connectivity…"
-psql -c '\l'
+psql
 #psql "$DATABASE_URL" -c '\dt'
 
 pip install -r requirements.txt
