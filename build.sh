@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+psql "$DATABASE_URL" -c '\dt'
 
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
