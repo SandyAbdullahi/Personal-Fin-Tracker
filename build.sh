@@ -10,11 +10,7 @@ set -x            # echo each command (helpful for logs)
 
 echo "🔍 Listing databases in the cluster to verify connectivity…"
 # Connect to the always-present 'postgres' database, then \l to list them
-PGPASSWORD=$(python - <<'PY'
-import os, re, sys, urllib.parse as up
-url = up.urlparse(os.environ['DATABASE_URL'])
-print(up.unquote(url.password or ''))
-PY)
+PGPASSWORD=$(python - <<'PY' import os, re, sys, urllib.parse as up url = up.urlparse(os.environ['DATABASE_URL']) print(up.unquote(url.password or ''))PY)
 
 # Strip the path component so we connect to /postgres instead of /yourdb
 BASE_URL=$(echo "$DATABASE_URL" | sed -E 's:/[^/]+$:/postgres:')
