@@ -3,8 +3,7 @@
 Minimal settings overrides used only by pytest in CI.
 Anything we *don’t* touch falls back to the regular settings.
 """
-from .settings import *          # noqa: F403  (import everything)
-
+# from .settings import *
 # ── Fast, throw-away, in-memory SQLite DB ────────────────────────────────────
 DATABASES = {
     "default": {
