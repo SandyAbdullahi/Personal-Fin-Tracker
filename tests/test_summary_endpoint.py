@@ -1,62 +1,71 @@
 # tests/test_summary_endpoint.py
-# import json
+import json
 
 import pytest
-
-pytestmark = pytest.mark.django_db
-
-from datetime import date
-from finance.models import Category, Transaction
 from django.urls import reverse
 from rest_framework.test import APIClient
-from django.contrib.auth import get_user_model
+
+from finance.models import Category, Transaction
 
 
-def test_summary_returns_grouped_totals(db):
-    # 1) Arrange
-    user = get_user_model().objects.create_user(
-        email="dummy@example.com", password="pass123"
-    )
-    cat_food = Category.objects.create(name="Food")
-    cat_rent = Category.objects.create(name="Rent")
+@pytest.mark.django_db
+def test_summary_returns_grouped_totals():
+    """
+    Hitting /api/finance/summary/ with a date range should return
+    grouped income/expense totals and category breakdown.
+    """
+    user = Category.objects.create(name="Salary").user  # quick user from FK
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    # Create some sample data
+    salary_cat = Category.objects.get(name="Salary")
+    food_cat = Category.objects.create(name="Food", user=user)
 
     Transaction.objects.bulk_create(
         [
             Transaction(
                 user=user,
-                category=cat_food,
+                category=salary_cat,
+                type="IN",
+                amount=5_000,
+                date="2025-07-10",
+                description="Pay cheque",
+            ),
+            Transaction(
+                user=user,
+                category=food_cat,
+                type="EX",
+                amount=200,
+                date="2025-07-11",
+                description="Groceries",
+            ),
+            Transaction(
+                user=user,
+                category=food_cat,
+                type="EX",
                 amount=50,
-                type="EX",
-                date=date(2025, 7, 2),
-            ),
-            Transaction(
-                user=user,
-                category=cat_food,
-                amount=70,
-                type="EX",
-                date=date(2025, 7, 15),
-            ),
-            Transaction(
-                user=user,
-                category=cat_rent,
-                amount=500,
-                type="EX",
-                date=date(2025, 7, 10),
+                date="2025-07-12",
+                description="Take-away",
             ),
         ]
     )
 
-    # 2) Act
-    client = APIClient()
-    client.force_authenticate(user=user)
-    url = reverse("finance:summary")  # or hard-code "/api/finance/summary/"
-    response = client.get(url, {"start": "2025-07-01", "end": "2025-07-31"})
+    url = reverse("finance-summary")  # mapped in finance/urls.py
+    resp = client.get(
+        url,
+        {"start": "2025-07-01", "end": "2025-07-31"},
+        format="json",
+    )
 
-    # 3) Assert
-    assert response.status_code == 200
-    data = response.json()
-    assert data["expense_total"] == 620
-    assert data["income_total"] == 0
-    # order in response may vary – normalise to dict for comparison
-    by_cat = {row["name"]: row["total"] for row in data["by_category"]}
-    assert by_cat == {"Rent": 500, "Food": 120}
+    assert resp.status_code == 200
+
+    data = resp.json()
+    assert data["income_total"] == 5000
+    assert data["expense_total"] == 250
+
+    # Category breakdown should be sorted by -total in the view
+    assert data["by_category"][0]["name"] == "Food"
+    assert data["by_category"][0]["total"] == 250
+    assert data["by_category"][1]["name"] == "Salary"
+    assert data["by_category"][1]["total"] == 5000
