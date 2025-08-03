@@ -1,23 +1,15 @@
-#!/usr/bin/env bash
-set -e
-set -x
-
-echo "🔍 Listing databases in the cluster to verify connectivity…"
-#psql "$(echo "$DATABASE_URL" | sed -E 's|/[^/]+$|/postgres|')" -c '\l'
-psql
-
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-# Lint only project code (option A) …
-# flake8 --exclude=.venv .
-
-# …or, after adding .flake8 (option B):
-flake8 .
-
-echo "▶️  Running unit/integration tests"
-pytest --cov=finance --cov=accounts --cov-report=term-missing -q
-
-
-#python manage.py migrate --noinput
-#python manage.py collectstatic --noinput
+echo "Ensuring the application database exists…"
+psql "$(echo "$DATABASE_URL" | sed -E 's|/[^/]+$|/postgres|')" \
+     -v dbname="$(echo "$DATABASE_URL" | sed -E 's|^.*/||')" \
+     -v dbuser="$DB_USER" <<'SQL'
+DO $$
+BEGIN
+   IF NOT EXISTS (
+     SELECT FROM pg_database WHERE datname = :'dbname'
+   ) THEN
+     PERFORM dblink_exec('dbname=postgres', 'CREATE DATABASE ' || quote_ident(:'dbname') ||
+                         ' OWNER ' || quote_ident(:'dbuser'));
+   END IF;
+END;
+$$;
+SQL
