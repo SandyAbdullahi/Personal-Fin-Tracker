@@ -15,7 +15,7 @@ flake8 .
 #
 ## 4. Unit tests — pytest automatically picks core.settings_ci via pytest.ini
 #export DJANGO_SETTINGS_MODULE=core.settings_ci
-#pytest --cov=.
+pytest --cov=.
 
 # 5. Collect static files & run migrations **with your normal settings**
 python manage.py collectstatic --noinput
