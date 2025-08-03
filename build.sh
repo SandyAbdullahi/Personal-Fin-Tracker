@@ -3,6 +3,7 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
+
 # 1. Install everything (system libs are already in the Render image)
 pip install --upgrade -r requirements.txt
 
@@ -13,7 +14,8 @@ pip install -q flake8 black pytest pytest-django pytest-cov
 flake8 .
 
 # 4. Unit tests — pytest automatically picks core.settings_ci via pytest.ini
-pytest
+export DJANGO_SETTINGS_MODULE=core.settings_ci
+pytest --cov=.
 
 # 5. Collect static files & run migrations **with your normal settings**
 python manage.py collectstatic --noinput
