@@ -11,7 +11,7 @@ pip install --upgrade -r requirements.txt
 pip install -q flake8 black pytest pytest-django pytest-cov
 
 ## 3. Style / lint
-#flake8 .
+flake8 .
 #
 ## 4. Unit tests — pytest automatically picks core.settings_ci via pytest.ini
 #export DJANGO_SETTINGS_MODULE=core.settings_ci
