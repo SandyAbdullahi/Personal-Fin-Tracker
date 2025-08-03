@@ -1,5 +1,9 @@
 # tests/test_summary_endpoint.py
 # import json
+import pytest
+
+pytestmark = pytest.mark.django_db
+
 from datetime import date
 
 from django.urls import reverse
