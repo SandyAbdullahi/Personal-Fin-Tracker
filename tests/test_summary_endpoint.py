@@ -1,16 +1,15 @@
 # tests/test_summary_endpoint.py
 # import json
 
-from datetime import date
-
-from django.urls import reverse
-from django.contrib.auth import get_user_model
-from rest_framework.test import APIClient
 import pytest
 
 pytestmark = pytest.mark.django_db
 
+from datetime import date
 from finance.models import Category, Transaction
+from django.urls import reverse
+from rest_framework.test import APIClient
+from django.contrib.auth import get_user_model
 
 
 def test_summary_returns_grouped_totals(db):
