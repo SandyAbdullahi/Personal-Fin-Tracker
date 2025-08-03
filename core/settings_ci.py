@@ -4,7 +4,7 @@ Settings used only by pytest / Render CI.
 They extend the normal project settings and then
 just swap the DB for SQLite-in-memory and speed-ups.
 """
-from .settings import *          # ⬅️  pull in EVERYTHING first
+# from .settings import *          # ⬅️  pull in EVERYTHING first
 import os
 
 # ------------------------------------------------------------------
