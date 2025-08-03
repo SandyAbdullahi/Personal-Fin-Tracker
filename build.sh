@@ -1,3 +1,7 @@
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+
 echo "Ensuring the application database exists…"
 psql "$(echo "$DATABASE_URL" | sed -E 's|/[^/]+$|/postgres|')" \
      -v dbname="$(echo "$DATABASE_URL" | sed -E 's|^.*/||')" \
