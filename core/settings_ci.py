@@ -5,7 +5,7 @@ Settings used **only** during CI / Render-builds.
 ▪️  Keeps INSTALLED_APPS identical to production so migrations load.
 """
 from pathlib import Path
-# from .settings import *
+from .settings import *
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -67,3 +67,19 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
 }
+
+# ─── templates (re-add DjangoTemplates so admin works) ──────────────────────
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],                       # keep or trim as you like
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                # only the processors admin needs
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+            ],
+        },
+    }
+]
