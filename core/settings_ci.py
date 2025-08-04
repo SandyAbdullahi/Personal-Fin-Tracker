@@ -4,7 +4,8 @@ Settings used **only** during CI / Render-builds.
 ▪️  Always uses in-memory SQLite → no env var needed.
 ▪️  Keeps INSTALLED_APPS identical to production so migrations load.
 """
-from pathlib import Path
+# from pathlib import Path
+from .settings import *
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -54,8 +55,11 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "/static/"
-STATICFILES_DIRS = [BASE_DIR / "static"]
+# ─── static files ──────────────────────────────────────────────────────────
+# Django only needs STATIC_ROOT to be *something* pointing to the filesystem
+# while it builds.  It won't actually be served during test runs.
+STATIC_ROOT = Path(BASE_DIR) / "staticfiles_ci"
+STATIC_URL = "/static/"            # keep the default
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
