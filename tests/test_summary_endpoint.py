@@ -1,57 +1,78 @@
-# tests/test_summary_endpoint.py
-# import json
+# ── tests/test_summary_endpoint.py ─────────────────────────────────────────────
+"""
+Integration-style test for the /api/finance/summary/ endpoint.
+
+We deliberately configure Django *before* importing any project code so that
+pytest-django never has a chance to pick up the wrong settings module.
+"""
+import os
+
+# 1) Point Django at the lightweight test settings.
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings_ci")
+
+# 2) Now initialise Django *before* we import project models, views, etc.
+import django  # noqa: E402  (flake8: ignore "import not at top of file")
+django.setup()
+
+# ──────────────────────────────────────────────────────────────────────────────
+import json
+from datetime import date
 
 import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from accounts.models import CustomUser
 from finance.models import Category, Transaction
 
+pytestmark = pytest.mark.django_db
 
-@pytest.mark.django_db
+
 def test_summary_returns_grouped_totals():
     """
-    Hitting /api/finance/summary/ with a date range should return
-    grouped income/expense totals and category breakdown.
+    POST some transactions, hit /api/finance/summary/, and check the grouping
+    logic (income total, expense total, per-category breakdown).
     """
-    user = Category.objects.create(name="Salary").user  # quick user from FK
-    client = APIClient()
-    client.force_authenticate(user=user)
+    user = CustomUser.objects.create_user(
+        email="test@example.com", password="secret123"
+    )
 
-    # Create some sample data
-    salary_cat = Category.objects.get(name="Salary")
-    food_cat = Category.objects.create(name="Food", user=user)
+    food = Category.objects.create(name="Food", user=user)
+    salary = Category.objects.create(name="Salary", user=user)
 
     Transaction.objects.bulk_create(
         [
             Transaction(
                 user=user,
-                category=salary_cat,
+                category=salary,
                 type="IN",
-                amount=5_000,
-                date="2025-07-10",
+                amount=3_000,
+                date=date(2025, 7, 10),
                 description="Pay cheque",
             ),
             Transaction(
                 user=user,
-                category=food_cat,
+                category=food,
                 type="EX",
-                amount=200,
-                date="2025-07-11",
+                amount=50,
+                date=date(2025, 7, 12),
                 description="Groceries",
             ),
             Transaction(
                 user=user,
-                category=food_cat,
+                category=food,
                 type="EX",
-                amount=50,
-                date="2025-07-12",
+                amount=30,
+                date=date(2025, 7, 14),
                 description="Take-away",
             ),
         ]
     )
 
-    url = reverse("finance-summary")  # mapped in finance/urls.py
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    url = reverse("finance:summary")  # adjust if you used a different name
     resp = client.get(
         url,
         {"start": "2025-07-01", "end": "2025-07-31"},
@@ -61,11 +82,9 @@ def test_summary_returns_grouped_totals():
     assert resp.status_code == 200
 
     data = resp.json()
-    assert data["income_total"] == 5000
-    assert data["expense_total"] == 250
+    assert data["income_total"] == 3000
+    assert data["expense_total"] == 80
 
-    # Category breakdown should be sorted by -total in the view
-    assert data["by_category"][0]["name"] == "Food"
-    assert data["by_category"][0]["total"] == 250
-    assert data["by_category"][1]["name"] == "Salary"
-    assert data["by_category"][1]["total"] == 5000
+    # Categories come back ordered by -total, so Salary first.
+    assert data["by_category"][0] == {"name": "Salary", "total": 3000}
+    assert data["by_category"][1] == {"name": "Food", "total": 80}

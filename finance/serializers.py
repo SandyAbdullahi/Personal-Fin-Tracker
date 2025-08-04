@@ -5,7 +5,12 @@ from .models import Transaction, Category, SavingsGoal
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ["id", "name"]
+        fields = ("id", "name")  # user is implicit
+
+    def create(self, validated_data):
+        return Category.objects.create(
+            user=self.context["request"].user, **validated_data
+        )
 
 
 class TransactionSerializer(serializers.ModelSerializer):
