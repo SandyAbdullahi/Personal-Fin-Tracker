@@ -25,22 +25,27 @@ class Category(models.Model):
 
 
 class Transaction(models.Model):
-    INCOME = "IN"
-    EXPENSE = "EX"
-    TYPE_CHOICES = [(INCOME, "Income"), (EXPENSE, "Expense")]
-
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="transactions"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="transactions",
     )
+    category = models.ForeignKey("Category", on_delete=models.PROTECT)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    type = models.CharField(max_length=2, choices=TYPE_CHOICES)
-    category = models.ForeignKey(Category, on_delete=models.PROTECT)  # keep data safe
     date = models.DateField()
-    note = models.TextField(blank=True)
+    type = models.CharField(
+        max_length=2,
+        choices=[("IN", "Income"), ("EX", "Expense")],
+    )
+    description = models.CharField(          #  ← NEW (optional)
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Optional free-text note shown to the user",
+    )
 
     def __str__(self):
-        return f"{self.user.email} - {self.get_type_display()} - {self.amount}"
-
+        return f"{self.type}: {self.amount} – {self.category}"
 
 class SavingsGoal(models.Model):
     user = models.ForeignKey(
