@@ -5,6 +5,7 @@ Settings used **only** during CI / Render-builds.
 ▪️  Keeps INSTALLED_APPS identical to production so migrations load.
 """
 from pathlib import Path
+
 # from .settings import *
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -59,7 +60,7 @@ USE_TZ = True
 # Django only needs STATIC_ROOT to be *something* pointing to the filesystem
 # while it builds.  It won't actually be served during test runs.
 STATIC_ROOT = Path(BASE_DIR) / "staticfiles_ci"
-STATIC_URL = "/static/"            # keep the default
+STATIC_URL = "/static/"  # keep the default
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -72,7 +73,7 @@ REST_FRAMEWORK = {
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],                       # keep or trim as you like
+        "DIRS": [],  # keep or trim as you like
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
