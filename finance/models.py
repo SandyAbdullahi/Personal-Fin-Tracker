@@ -9,7 +9,7 @@ class Category(models.Model):
     A category belongs to one user so that two users can each have
     their own “Food”, “Salary”, etc. without collisions.
     """
-    user = models.ForeignKey(                       # ← NEW
+    user = models.ForeignKey(  # ← NEW
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="categories",
@@ -17,7 +17,7 @@ class Category(models.Model):
     name = models.CharField(max_length=50)
 
     class Meta:
-        unique_together = ("user", "name")          # one name per user
+        unique_together = ("user", "name")  # one name per user
         ordering = ("name",)
 
     def __str__(self):
@@ -37,7 +37,7 @@ class Transaction(models.Model):
         max_length=2,
         choices=[("IN", "Income"), ("EX", "Expense")],
     )
-    description = models.CharField(          #  ← NEW (optional)
+    description = models.CharField(
         max_length=255,
         blank=True,
         default="",
@@ -46,6 +46,7 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"{self.type}: {self.amount} – {self.category}"
+
 
 class SavingsGoal(models.Model):
     user = models.ForeignKey(
@@ -59,12 +60,12 @@ class SavingsGoal(models.Model):
     @property
     def amount_saved(self):
         total = (
-            self.user.transactions.filter(
-                type="IN",
-                category__name="Savings",
-                date__lte=timezone.now().date(),
-            ).aggregate(models.Sum("amount"))["amount__sum"]
-            or 0
+                self.user.transactions.filter(
+                    type="IN",
+                    category__name="Savings",
+                    date__lte=timezone.now().date(),
+                ).aggregate(models.Sum("amount"))["amount__sum"]
+                or 0
         )
         return total
 

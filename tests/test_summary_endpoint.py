@@ -15,7 +15,7 @@ import django  # noqa: E402  (flake8: ignore "import not at top of file")
 django.setup()
 
 # ──────────────────────────────────────────────────────────────────────────────
-import json
+# import json
 from datetime import date
 
 import pytest
