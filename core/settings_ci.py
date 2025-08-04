@@ -5,6 +5,7 @@ Settings used **only** during CI / Render-builds.
 ▪️  Keeps INSTALLED_APPS identical to production so migrations load.
 """
 
+import os
 from pathlib import Path
 
 # from .settings import *
@@ -13,7 +14,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = "ci-secret-key"
 DEBUG = True
-ALLOWED_HOSTS: list[str] = ["personal-fin-tracker.onrender.com"]
+
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+]
+
+# 1️⃣ Add your Render custom domain explicitly
+ALLOWED_HOSTS += ["personal-fin-tracker.onrender.com"]
+
+# 2️⃣ …and make it future-proof for new preview URLs
+RENDER_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")  # set automatically by Render
+if RENDER_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_HOSTNAME)
 
 INSTALLED_APPS = [
     # Django
