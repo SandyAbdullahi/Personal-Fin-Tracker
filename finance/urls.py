@@ -3,6 +3,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import CategoryViewSet, TransactionViewSet, SavingsGoalViewSet, summary
 
+app_name = "finance"
 
 router = DefaultRouter()
 router.register(r"transactions", TransactionViewSet, basename="transactions")  # 👈 plural

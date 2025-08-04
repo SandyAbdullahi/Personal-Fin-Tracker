@@ -9,9 +9,9 @@ from tests.factories import (
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("factory_name, url_name", [
-    ("category", "categories-list"),
-    ("transaction", "transactions-list"),
-    ("savingsgoal", "goals-list"),
+    ("category", "finance:categories-list"),
+    ("transaction", "finance:transactions-list"),
+    ("savingsgoal", "finance:goals-list"),
 ])
 def test_user_cannot_see_others(factory_name, url_name, api_client):
     owner = UserFactory()
