@@ -1,10 +1,12 @@
 from django.db.models import Sum, F
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from .permissions import IsOwnerOrReadOnly
 from rest_framework.response import Response
 from .models import Transaction
 
-from .models import Category
+from .models import Category, SavingsGoal
 from .serializers import (
     CategorySerializer,
     TransactionSerializer,
@@ -16,9 +18,14 @@ from .serializers import (
 #   Category CRUD
 # ────────────────────────────────────────────────
 class CategoryViewSet(viewsets.ModelViewSet):
-    queryset = Category.objects.all()
     serializer_class = CategorySerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+
+    def get_queryset(self):
+        return Category.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 # ────────────────────────────────────────────────
@@ -29,16 +36,18 @@ class TransactionViewSet(viewsets.ModelViewSet):
     Standard CRUD endpoint backed by TransactionSerializer.
     Only returns the requesting user’s own transactions.
     """
-
+    queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
     def get_queryset(self):
-        return Transaction.objects.filter(user=self.request.user).order_by("-date")
+        return Transaction.objects.filter(user=self.request.user)
 
-    # Ensure new objects are stamped with the authenticated user
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def get_success_headers(self, data):
+        return {}
 
 
 # ────────────────────────────────────────────────
@@ -46,10 +55,10 @@ class TransactionViewSet(viewsets.ModelViewSet):
 # ────────────────────────────────────────────────
 class SavingsGoalViewSet(viewsets.ModelViewSet):
     serializer_class = SavingsGoalSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
     def get_queryset(self):
-        return self.request.user.goals.all()
+        return SavingsGoal.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -59,7 +68,7 @@ class SavingsGoalViewSet(viewsets.ModelViewSet):
 #   Finance Summary Endpoint
 # ────────────────────────────────────────────────
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsAuthenticated])
 def summary(request):
     """
     Returns total income, total expenses, per-category totals,
@@ -69,7 +78,7 @@ def summary(request):
       ?start=YYYY-MM-DD   filter transactions from this date
       ?end=YYYY-MM-DD     filter up to this date
     """
-    qs = request.user.transactions.all()
+    qs = Transaction.objects.filter(user=request.user)
 
     start = request.GET.get("start")
     end = request.GET.get("end")

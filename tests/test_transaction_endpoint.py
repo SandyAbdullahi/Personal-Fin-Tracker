@@ -7,7 +7,7 @@ from tests.factories import TransactionFactory
 
 @pytest.mark.django_db
 def test_create_transaction(api_client, auth_user, category):
-    url = reverse("finance:transaction-list")  # ← here
+    url = reverse("finance:transactions-list")  # ← here
     payload = {
         "category": category.id,
         "type": "EX",
