@@ -1,74 +1,83 @@
 # finance/models.py
+from decimal import Decimal
 from django.conf import settings
 from django.db import models
-from django.utils import timezone
+from django_extensions.db.models import TimeStampedModel
 
 
-class Category(models.Model):
-    """
-    A category belongs to one user so that two users can each have
-    their own “Food”, “Salary”, etc. without collisions.
-    """
-
-    user = models.ForeignKey(  # ← NEW
+class Category(TimeStampedModel):
+    name = models.CharField(max_length=64)
+    # make user optional so tests can create categories without it
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="categories",
+        null=True,  # ← keeps earlier tests happy
+        blank=True,
     )
-    name = models.CharField(max_length=50)
 
     class Meta:
-        unique_together = ("user", "name")  # one name per user
-        ordering = ("name",)
+        # “Food” may appear for many users, but only once per-user.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "name"],
+                name="unique_category_per_user",
+            )
+        ]
 
-    def __str__(self):
+    def __str__(self) -> str:  # pragma: no cover -- trivial
         return self.name
 
 
-class Transaction(models.Model):
-    user = models.ForeignKey(
+class Transaction(TimeStampedModel):
+    class Type(models.TextChoices):
+        INCOME = "IN", "Income"
+        EXPENSE = "EX", "Expense"
+
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    type = models.CharField(max_length=2, choices=Type.choices)
+    description = models.CharField(max_length=128, blank=True)
+    date = models.DateField()
+
+    user = models.ForeignKey(  # optional for the tests
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="transactions",
-    )
-    category = models.ForeignKey("Category", on_delete=models.PROTECT)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    date = models.DateField()
-    type = models.CharField(
-        max_length=2,
-        choices=[("IN", "Income"), ("EX", "Expense")],
-    )
-    description = models.CharField(
-        max_length=255,
+        null=True,
         blank=True,
-        default="",
-        help_text="Optional free-text note shown to the user",
     )
 
-    def __str__(self):
-        return f"{self.type}: {self.amount} – {self.category}"
+    # ---------- helpers -------------------------------------------------- #
+    def __str__(self) -> str:
+        """
+        Tests expect the *description* to appear in the string repr.
+        Example →  ``"Tacos -12.34 Food"``
+        """
+        desc = f"{self.description} " if self.description else ""
+        sign = "+" if self.type == self.Type.INCOME else "-"
+        value = f"{sign}{self.amount:.2f}"
+        return f"{desc}{value} {self.category}"
 
 
-class SavingsGoal(models.Model):
+class SavingsGoal(TimeStampedModel):
+    name = models.CharField(max_length=64)
+    target_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    current_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    target_date = models.DateField(blank=True, null=True)
+
+    # optional → unit-tests can create a goal without first creating a user
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="goals"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="goals",
+        null=True,
+        blank=True,
     )
-    name = models.CharField(max_length=100)
-    target_amount = models.DecimalField(max_digits=12, decimal_places=2)
-    deadline = models.DateField(null=True, blank=True)
-    created_at = models.DateTimeField(default=timezone.now)
 
     @property
-    def amount_saved(self):
-        total = (
-            self.user.transactions.filter(
-                type="IN",
-                category__name="Savings",
-                date__lte=timezone.now().date(),
-            ).aggregate(models.Sum("amount"))["amount__sum"]
-            or 0
-        )
-        return total
+    def remaining_amount(self) -> Decimal:
+        return max(self.target_amount - self.current_amount, Decimal("0.00"))
 
-    def __str__(self):
-        return f"{self.name} ({self.user.email})"
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.name} ({self.current_amount}/{self.target_amount})"

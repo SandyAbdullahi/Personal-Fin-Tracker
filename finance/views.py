@@ -2,6 +2,7 @@ from django.db.models import Sum, F
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from .models import Transaction
 
 from .models import Category
 from .serializers import (
@@ -24,18 +25,19 @@ class CategoryViewSet(viewsets.ModelViewSet):
 #   Transaction CRUD (user-scoped)
 # ────────────────────────────────────────────────
 class TransactionViewSet(viewsets.ModelViewSet):
+    """
+    Standard CRUD endpoint backed by TransactionSerializer.
+    Only returns the requesting user’s own transactions.
+    """
+
     serializer_class = TransactionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    # Enable query-param filters (?type=EX&category=1&date=2025-07-30)
-    filterset_fields = ["type", "category", "date"]
-
     def get_queryset(self):
-        # Only the current user’s transactions
-        return self.request.user.transactions.all()
+        return Transaction.objects.filter(user=self.request.user).order_by("-date")
 
+    # Ensure new objects are stamped with the authenticated user
     def perform_create(self, serializer):
-        # Auto-attach user on POST
         serializer.save(user=self.request.user)
 
 
