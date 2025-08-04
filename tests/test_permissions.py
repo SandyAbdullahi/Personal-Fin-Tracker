@@ -6,6 +6,7 @@ from tests.factories import (
     UserFactory, CategoryFactory, TransactionFactory, SavingsGoalFactory
 )
 
+
 @pytest.mark.django_db
 @pytest.mark.parametrize("factory_name, url_name", [
     ("category", "categories-list"),
