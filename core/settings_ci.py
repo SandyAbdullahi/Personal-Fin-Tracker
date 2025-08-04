@@ -5,7 +5,7 @@ Settings used **only** during CI / Render-builds.
 ▪️  Keeps INSTALLED_APPS identical to production so migrations load.
 """
 from pathlib import Path
-from .settings import *
+# from .settings import *
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
