@@ -13,7 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = "ci-secret-key"
 DEBUG = True
-ALLOWED_HOSTS: list[str] = []
+ALLOWED_HOSTS: list[str] = ["personal-fin-tracker.onrender.com"]
 
 INSTALLED_APPS = [
     # Django
