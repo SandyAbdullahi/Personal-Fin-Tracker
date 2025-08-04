@@ -4,6 +4,7 @@ Settings used **only** during CI / Render-builds.
 ▪️  Always uses in-memory SQLite → no env var needed.
 ▪️  Keeps INSTALLED_APPS identical to production so migrations load.
 """
+
 from pathlib import Path
 
 # from .settings import *
@@ -77,9 +78,10 @@ TEMPLATES = [
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
-                # only the processors admin needs
+                "django.template.context_processors.debug",
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     }

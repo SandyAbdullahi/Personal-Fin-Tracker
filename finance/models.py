@@ -9,6 +9,7 @@ class Category(models.Model):
     A category belongs to one user so that two users can each have
     their own “Food”, “Salary”, etc. without collisions.
     """
+
     user = models.ForeignKey(  # ← NEW
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -60,12 +61,12 @@ class SavingsGoal(models.Model):
     @property
     def amount_saved(self):
         total = (
-                self.user.transactions.filter(
-                    type="IN",
-                    category__name="Savings",
-                    date__lte=timezone.now().date(),
-                ).aggregate(models.Sum("amount"))["amount__sum"]
-                or 0
+            self.user.transactions.filter(
+                type="IN",
+                category__name="Savings",
+                date__lte=timezone.now().date(),
+            ).aggregate(models.Sum("amount"))["amount__sum"]
+            or 0
         )
         return total
 

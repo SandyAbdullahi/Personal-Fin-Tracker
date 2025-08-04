@@ -87,8 +87,8 @@ WSGI_APPLICATION = "core.wsgi.application"
 DATABASES = {
     "default": dj_database_url.parse(
         os.getenv("INTERNAL_DATABASE_URL")
-        or os.getenv("DATABASE_URL")                 # e.g. your Neon string
-        or f"sqlite:///{BASE_DIR / 'db.sqlite3'}",   # dev fallback
+        or os.getenv("DATABASE_URL")  # e.g. your Neon string
+        or f"sqlite:///{BASE_DIR / 'db.sqlite3'}",  # dev fallback
         conn_max_age=600,
         ssl_require=bool(os.getenv("INTERNAL_DATABASE_URL")),
     )

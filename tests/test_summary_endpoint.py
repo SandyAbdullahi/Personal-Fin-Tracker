@@ -12,6 +12,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings_ci")
 
 # 2) Now initialise Django *before* we import project models, views, etc.
 import django  # noqa: E402  (flake8: ignore "import not at top of file")
+
 django.setup()
 
 # ──────────────────────────────────────────────────────────────────────────────
