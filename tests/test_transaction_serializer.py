@@ -2,7 +2,7 @@
 import pytest
 
 from finance.serializers import TransactionSerializer
-from tests.factories import UserFactory, CategoryFactory
+from tests.factories import CategoryFactory, UserFactory
 
 
 @pytest.mark.django_db

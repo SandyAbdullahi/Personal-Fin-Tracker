@@ -1,5 +1,6 @@
 # finance/models.py
 from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
 from django_extensions.db.models import TimeStampedModel

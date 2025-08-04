@@ -1,6 +1,7 @@
 import factory
 from django.contrib.auth import get_user_model
-from finance.models import Category, Transaction, SavingsGoal
+
+from finance.models import Category, SavingsGoal, Transaction
 
 User = get_user_model()
 

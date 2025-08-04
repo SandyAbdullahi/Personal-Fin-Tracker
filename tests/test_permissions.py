@@ -2,17 +2,19 @@
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from tests.factories import (
-    UserFactory, CategoryFactory, TransactionFactory, SavingsGoalFactory
-)
+
+from tests.factories import CategoryFactory, SavingsGoalFactory, TransactionFactory, UserFactory
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("factory_name, url_name", [
-    ("category", "finance:categories-list"),
-    ("transaction", "finance:transactions-list"),
-    ("savingsgoal", "finance:goals-list"),
-])
+@pytest.mark.parametrize(
+    "factory_name, url_name",
+    [
+        ("category", "finance:categories-list"),
+        ("transaction", "finance:transactions-list"),
+        ("savingsgoal", "finance:goals-list"),
+    ],
+)
 def test_user_cannot_see_others(factory_name, url_name, api_client):
     owner = UserFactory()
     intruder = UserFactory()
@@ -21,13 +23,13 @@ def test_user_cannot_see_others(factory_name, url_name, api_client):
         "category": CategoryFactory,
         "transaction": TransactionFactory,
         "savingsgoal": SavingsGoalFactory,
-    }[factory_name](user=owner)
+    }[
+        factory_name
+    ](user=owner)
 
     api_client.force_authenticate(intruder)
     list_resp = api_client.get(reverse(url_name))
-    detail_resp = api_client.get(
-        reverse(url_name.replace("list", "detail"), args=[obj.pk])
-    )
+    detail_resp = api_client.get(reverse(url_name.replace("list", "detail"), args=[obj.pk]))
 
     assert obj.pk not in [o["id"] for o in list_resp.data]
     assert detail_resp.status_code == status.HTTP_404_NOT_FOUND

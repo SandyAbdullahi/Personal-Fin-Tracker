@@ -1,7 +1,8 @@
 # finance/serializers.py
-from rest_framework import serializers
 from django.shortcuts import get_object_or_404
-from .models import Category, Transaction, SavingsGoal
+from rest_framework import serializers
+
+from .models import Category, SavingsGoal, Transaction
 
 
 class TransactionSerializer(serializers.ModelSerializer):
@@ -44,9 +45,7 @@ class TransactionSerializer(serializers.ModelSerializer):
     # ------------------------------------------------------------------ #
     def create(self, validated_data):
         # Pull whichever alias was provided
-        category = validated_data.pop("category", None) or validated_data.pop(
-            "category_id", None
-        )
+        category = validated_data.pop("category", None) or validated_data.pop("category_id", None)
         validated_data["category"] = category
 
         # Stamp user if request is in context

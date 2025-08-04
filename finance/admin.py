@@ -1,5 +1,6 @@
 # finance/admin.py
 from django.contrib import admin
+
 from .models import Category, Transaction
 
 admin.site.register(Category)

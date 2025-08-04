@@ -26,7 +26,7 @@ django.setup()
 import pytest  # noqa: E402
 from rest_framework.test import APIClient  # noqa: E402
 
-from tests.factories import UserFactory, CategoryFactory  # noqa: E402
+from tests.factories import CategoryFactory, UserFactory  # noqa: E402
 
 
 @pytest.fixture

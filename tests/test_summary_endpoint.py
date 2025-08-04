@@ -14,8 +14,8 @@ import os
 
 import pytest
 from django.conf import settings
-from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
+from rest_framework.test import APIClient
 
 # --------------------------------------------------------------------------- #
 # 1.  Ensure the correct settings module is used

@@ -1,17 +1,12 @@
-from django.db.models import Sum, F
+from django.db.models import F, Sum
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from .permissions import IsOwnerOrReadOnly
 from rest_framework.response import Response
-from .models import Transaction
 
-from .models import Category, SavingsGoal
-from .serializers import (
-    CategorySerializer,
-    TransactionSerializer,
-    SavingsGoalSerializer,
-)
+from .models import Category, SavingsGoal, Transaction
+from .permissions import IsOwnerOrReadOnly
+from .serializers import CategorySerializer, SavingsGoalSerializer, TransactionSerializer
 
 
 # ────────────────────────────────────────────────
@@ -36,6 +31,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
     Standard CRUD endpoint backed by TransactionSerializer.
     Only returns the requesting user’s own transactions.
     """
+
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
@@ -102,11 +98,7 @@ def summary(request):
             "name": g.name,
             "target": g.target_amount,
             "saved": g.amount_saved,
-            "percent": (
-                round((g.amount_saved / g.target_amount) * 100, 1)
-                if g.target_amount
-                else 0
-            ),
+            "percent": (round((g.amount_saved / g.target_amount) * 100, 1) if g.target_amount else 0),
             "deadline": g.deadline,
         }
         for g in request.user.goals.all()
