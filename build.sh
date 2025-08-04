@@ -12,18 +12,12 @@ pip install -q flake8 black pytest pytest-django pytest-cov
 
 export DJANGO_SETTINGS_MODULE=core.settings_ci
 
+## 3. Style / lint
+flake8 .
+
 echo "Running tests with settings ➜ $DJANGO_SETTINGS_MODULE"
 pytest --cov=.
 
-
-#
-### 3. Style / lint
-#flake8 .
-##
-### 4. Unit tests — pytest automatically picks core.settings_ci via pytest.ini
-##export DJANGO_SETTINGS_MODULE=core.settings_ci
-#pytest --cov=.
-#
-## 5. Collect static files & run migrations **with your normal settings**
-#python manage.py collectstatic --noinput
-#python manage.py migrate --noinput
+# 5. Collect static files & run migrations **with your normal settings**
+python manage.py collectstatic --noinput
+python manage.py migrate --noinput
