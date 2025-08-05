@@ -53,6 +53,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -75,6 +76,10 @@ USE_TZ = True
 # while it builds.  It won't actually be served during test runs.
 STATIC_ROOT = Path(BASE_DIR) / "staticfiles_ci"
 STATIC_URL = "/static/"  # keep the default
+
+STATICFILES_DIRS = [BASE_DIR / "static"]  # optional: your own assets
+
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
