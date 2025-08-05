@@ -34,3 +34,17 @@ databases:
   - name: personal-fin-tracker-db
     region: oregon
     plan: free
+
+jobs:
+  - type: cron
+    name: post-recurring
+    env: python
+    schedule: "0 5 * * *"      # 05:00 UTC daily
+    command: |
+      PYTHONUNBUFFERED=1 DJANGO_SETTINGS_MODULE=core.settings \
+      python manage.py post_recurring
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DJANGO_SETTINGS_MODULE
+        value: core.settings

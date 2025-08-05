@@ -1,8 +1,12 @@
 # finance/models.py
+from datetime import date
 from decimal import Decimal
 
+from dateutil.rrule import rrulestr
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from django_extensions.db.models import TimeStampedModel
 
 
@@ -82,3 +86,71 @@ class SavingsGoal(TimeStampedModel):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.name} ({self.current_amount}/{self.target_amount})"
+
+
+class RecurringTransaction(models.Model):
+    """
+    Blueprint for posting future `Transaction`s automatically.
+
+    Example: a rent payment of –750 on the 1st of every month.
+    """
+
+    # ───────────────────────────── basics ───────────────────────────── #
+    user = models.ForeignKey(
+        "accounts.CustomUser",
+        on_delete=models.CASCADE,
+        related_name="recurrings",
+    )
+    category = models.ForeignKey(
+        "finance.Category",
+        on_delete=models.PROTECT,
+        related_name="recurrings",
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    type = models.CharField(
+        max_length=2,
+        choices=[("IN", "Income"), ("EX", "Expense")],
+    )
+    description = models.CharField(max_length=255, blank=True)
+
+    # ───────────────────────── cadence / schedule ───────────────────── #
+    # We store an **RFC-5545 RRULE** string because it’s flexible,
+    # human-readable and can be parsed by `dateutil.rrule`.
+    #
+    # ▸ Examples
+    #   - "FREQ=MONTHLY;BYMONTHDAY=1"           → every 1st
+    #   - "FREQ=WEEKLY;BYDAY=MO,FR"             → every Monday & Friday
+    #   - "FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=25"→ every Christmas
+    rrule = models.CharField(max_length=200)
+
+    # the next date at which we still need to post the transaction
+    next_occurrence = models.DateField()
+
+    # If a recurring item should stop after N posts (optional)
+    end_date = models.DateField(null=True, blank=True)
+
+    # ───────────────────────── housekeeping ─────────────────────────── #
+    active = models.BooleanField(default=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("user", "description", "rrule")  # avoid duplicates
+        ordering = ("next_occurrence",)
+
+    # ───────────────────────── validation hooks ─────────────────────── #
+    def clean(self):
+        super().clean()
+
+        # 1. Make sure `rrule` parses.
+        try:
+            rrulestr(self.rrule, dtstart=date.today())
+        except (ValueError, TypeError):
+            raise ValidationError({"rrule": "Invalid RRULE string."})
+
+        # 2. next_occurrence must be ≥ today
+        if self.next_occurrence < timezone.localdate():
+            raise ValidationError({"next_occurrence": "Date cannot be in the past."})
+
+    def __str__(self) -> str:
+        return f"{self.user} → {self.amount} {self.get_type_display()} @ {self.rrule}"
