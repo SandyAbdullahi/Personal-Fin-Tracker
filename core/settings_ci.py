@@ -1,49 +1,34 @@
 """
-Settings used **only** during CI / Render-builds.
+settings_ci.py
+───────────────────────────────────────────────────────────────────────────────
+Settings that are *only* loaded in CI pipelines and during Render’s build stage.
 
-▪️  Always uses in-memory SQLite → no env var needed.
-▪️  Keeps INSTALLED_APPS identical to production so migrations load.
+✦ Uses an in-memory SQLite DB -- lightning-fast, no secrets required
+✦ Keeps INSTALLED_APPS identical to production so migrations import cleanly
+✦ Ships static assets with WhiteNoise (hashed filenames + gzip/brotli)
 """
 
 import os
 from pathlib import Path
 
-# from .settings import *
-
+# ─── core ──────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = "ci-secret-key"
 DEBUG = True
 
-
-STATIC_URL = "/static/"
-
-# where `collectstatic` will dump everything for Whitenoise
-STATIC_ROOT = BASE_DIR / "staticfiles"
-
-# optional: keep your own un-compiled assets here
-STATICFILES_DIRS = [BASE_DIR / "static"]
-
-# Whitenoise storage gives hashed filenames + gzip + brotli
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    }
-}
-
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
+    "personal-fin-tracker.onrender.com",  # Render custom domain
 ]
 
-# 1️⃣ Add your Render custom domain explicitly
-ALLOWED_HOSTS += ["personal-fin-tracker.onrender.com"]
-
-# 2️⃣ …and make it future-proof for new preview URLs
-RENDER_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")  # set automatically by Render
+# Render adds this env var for every deploy/preview URL
+RENDER_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")
 if RENDER_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_HOSTNAME)
 
+# ─── apps / middleware ─────────────────────────────────────────────────────
 INSTALLED_APPS = [
     # Django
     "django.contrib.admin",
@@ -56,13 +41,14 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "django_filters",
-    # Local apps
+    # Local
     "accounts",
     "finance",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # ← must be directly after Security
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -74,36 +60,32 @@ MIDDLEWARE = [
 ROOT_URLCONF = "core.urls"
 WSGI_APPLICATION = "core.wsgi.application"
 
-# ── THE IMPORTANT BIT ────────────────────────────────────────────────────────
-DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
-# ─────────────────────────────────────────────────────────────────────────────
-
-AUTH_USER_MODEL = "accounts.CustomUser"
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
-USE_I18N = True
-USE_TZ = True
-
-# ─── static files ──────────────────────────────────────────────────────────
-# Django only needs STATIC_ROOT to be *something* pointing to the filesystem
-# while it builds.  It won't actually be served during test runs.
-STATIC_ROOT = Path(BASE_DIR) / "staticfiles_ci"
-STATIC_URL = "/static/"  # keep the default
-
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ],
-    "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
+# ─── database (in-memory) ──────────────────────────────────────────────────
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": ":memory:",
+    }
 }
 
-# ─── templates (re-add DjangoTemplates so admin works) ──────────────────────
+# ─── static files ──────────────────────────────────────────────────────────
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # ← only *one* definition now
+STATICFILES_DIRS = [BASE_DIR / "static"]  # your own assets (optional)
+
+# Django 4.x prefers the new STORAGES setting; this replaces the old
+# STATICFILES_STORAGE key and avoids duplicate configs.
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+}
+
+# ─── templates (admin needs this) ──────────────────────────────────────────
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],  # keep or trim as you like
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -115,3 +97,21 @@ TEMPLATES = [
         },
     }
 ]
+
+# ─── DRF defaults ──────────────────────────────────────────────────────────
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+    ],
+}
+
+# ─── misc ──────────────────────────────────────────────────────────────────
+AUTH_USER_MODEL = "accounts.CustomUser"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "UTC"
+USE_I18N = True
+USE_TZ = True
