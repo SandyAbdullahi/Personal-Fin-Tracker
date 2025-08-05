@@ -9,7 +9,10 @@ Settings that are *only* loaded in CI pipelines and during Render’s build stag
 """
 
 import os
+import sys
 from pathlib import Path
+
+import dj_database_url
 
 # ─── core ──────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -61,11 +64,16 @@ ROOT_URLCONF = "core.urls"
 WSGI_APPLICATION = "core.wsgi.application"
 
 # ─── database (in-memory) ──────────────────────────────────────────────────
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL and not DEBUG:
+    sys.stderr.write("❌  DATABASE_URL must be set in production\n")
+    sys.exit(1)
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
-    }
+    "default": dj_database_url.parse(
+        DATABASE_URL or "sqlite:///db.sqlite3",  # dev fallback only
+        conn_max_age=600,
+    )
 }
 
 # ─── static files ──────────────────────────────────────────────────────────
