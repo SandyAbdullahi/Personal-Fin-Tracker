@@ -1,5 +1,4 @@
-# finance/management/commands/post_recurring.py
-from datetime import date
+import datetime as dt
 
 from dateutil.rrule import rrulestr
 from django.core.management.base import BaseCommand
@@ -9,21 +8,18 @@ from finance.models import RecurringTransaction, Transaction
 
 
 class Command(BaseCommand):
-    help = "Create real Transaction rows for every RecurringTransaction due today."
+    help = "Create Transaction rows for every RecurringTransaction due today."
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--dry-run",
-            action="store_true",
-            help="Only show what would be created; do NOT touch the database.",
-        )
+        parser.add_argument("--dry-run", action="store_true")
 
     # ------------------------------------------------------------------ #
-    def handle(self, *args, dry_run=False, **kwargs):  # noqa: D401
-        """Find every recurring entry where `next_occurrence ≤ today` and post it."""
-        today = date.today()
-        due_qs = RecurringTransaction.objects.filter(active=True, next_occurrence__lte=today).select_related(
-            "user", "category"
+    def handle(self, *args, dry_run=False, **kwargs):
+        today = dt.date.today()
+        due_qs = (
+            RecurringTransaction.objects.filter(active=True, next_occurrence__lte=today)
+            .select_related("user", "category")
+            .order_by("next_occurrence")
         )
 
         if not due_qs.exists():
@@ -32,18 +28,22 @@ class Command(BaseCommand):
 
         with db_tx.atomic():
             for r in due_qs:
-                # loop in case the cadence is < today by more than one step
                 while r.active and r.next_occurrence <= today:
-                    self._post_single_occurrence(r, dry_run=today if dry_run else None)
+                    self._post_once(r, dry_run)
+
+                    # ensure it's a plain *date* before looping again
+                    if isinstance(r.next_occurrence, dt.datetime):
+                        r.next_occurrence = r.next_occurrence.date()
 
             if dry_run:
-                db_tx.set_rollback(True)  # never commit in dry-run mode
+                db_tx.set_rollback(True)
 
-        self.stdout.write(self.style.SUCCESS(f"✓ Finished. {'(dry-run)' if dry_run else ''}"))
+        self.stdout.write(self.style.SUCCESS("✓ Finished."))
+        if dry_run:
+            self.stdout.write(self.style.WARNING(" (dry-run: rolled back)"))
 
     # ------------------------------------------------------------------ #
-    def _post_single_occurrence(self, r: RecurringTransaction, dry_run: bool):
-        """Insert a Transaction and push `next_occurrence` forward one step."""
+    def _post_once(self, r: RecurringTransaction, dry_run: bool):
         if not dry_run:
             Transaction.objects.create(
                 user=r.user,
@@ -54,15 +54,21 @@ class Command(BaseCommand):
                 date=r.next_occurrence,
             )
 
-        # advance to the next date
-        rule = rrulestr(r.rrule, dtstart=r.next_occurrence)
-        next_date = rule.after(r.next_occurrence)
+        # ----- make sure dtstart is a datetime ------------------------
+        dt_start = (
+            r.next_occurrence
+            if isinstance(r.next_occurrence, dt.datetime)
+            else dt.datetime.combine(r.next_occurrence, dt.time.min)
+        )
 
-        # deactivate if finished
+        rule = rrulestr(r.rrule, dtstart=dt_start)
+        next_dt = rule.after(dt_start)  # datetime | None
+        next_date = next_dt.date() if next_dt else None
+
         if next_date is None or (r.end_date and next_date > r.end_date):
             r.active = False
         else:
-            r.next_occurrence = next_date
+            r.next_occurrence = next_date  # store as *date*
 
         if not dry_run:
             r.save(update_fields=["next_occurrence", "active"])
