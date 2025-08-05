@@ -1,28 +1,36 @@
+# ───────────────────────── render.yaml ─────────────────────────
 services:
   - type: web
     name: personal-fin-tracker
     env: python
+    region: oregon           # or whatever region you chose
 
     buildCommand: |
-      pip install -r requirements.txt
-      # collectstatic here later if you need it
+      ./build.sh             # runs flake8 + pytest, fails build on error
 
     startCommand: |
-      # Unbuffered stdout so you SEE the migrate logs
-      PYTHONUNBUFFERED=1 \
-      sh -c "
-        echo '--- running migrations ---' &&
-        python manage.py migrate --noinput &&
-        echo '--- starting gunicorn ---' &&
-        gunicorn core.wsgi:application
-      "
+      ./start.sh             # runs migrate + gunicorn
 
     envVars:
+      # ─── Django core ─────────────────────────────────────────
       - key: DJANGO_SETTINGS_MODULE
-        value: core.settings
+        value: core.settings_ci       # we’ve been using the CI/Prod settings
       - key: SECRET_KEY
-        sync: false
+        sync: false                   # fill in via the UI
       - key: DEBUG
-        sync: false
-      - key: DATABASE_URL
-        sync: false
+        value: "False"
+
+      # ─── Database  (Render Postgres OR external) ────────────
+      - fromDatabase:
+          name: personal-fin-tracker-db   # Render DB name
+          property: connectionString
+        key: DATABASE_URL
+
+      # ─── Optional: allow tests that hit external APIs, etc. ─
+      # - key: API_TOKEN
+      #   sync: false
+
+databases:
+  - name: personal-fin-tracker-db
+    region: oregon
+    plan: free
