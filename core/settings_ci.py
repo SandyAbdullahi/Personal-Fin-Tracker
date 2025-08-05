@@ -15,6 +15,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "ci-secret-key"
 DEBUG = True
 
+
+STATIC_URL = "/static/"
+
+# where `collectstatic` will dump everything for Whitenoise
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# optional: keep your own un-compiled assets here
+STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# Whitenoise storage gives hashed filenames + gzip + brotli
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+}
+
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
