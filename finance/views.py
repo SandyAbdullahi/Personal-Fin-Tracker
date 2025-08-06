@@ -1,9 +1,12 @@
 from django.db.models import F, Sum
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters as drf_filters
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .filters import TransactionFilter
 from .models import Category, SavingsGoal, Transaction
 from .permissions import IsOwnerOrReadOnly
 from .serializers import CategorySerializer, SavingsGoalSerializer, TransactionSerializer
@@ -44,6 +47,11 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def get_success_headers(self, data):
         return {}
+
+    filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
+    filterset_class = TransactionFilter
+    ordering_fields = ["date", "amount", "id"]  # allowed
+    ordering = ["-date"]  # default
 
 
 # ────────────────────────────────────────────────
