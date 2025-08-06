@@ -1,5 +1,5 @@
 # finance/serializers.py
-from datetime import timezone
+
 
 from dateutil.rrule import rrulestr
 from django.shortcuts import get_object_or_404
@@ -98,22 +98,19 @@ class SavingsGoalSerializer(serializers.ModelSerializer):
 
 class RecurringTransactionSerializer(serializers.ModelSerializer):
     """
-    Converts the model <-> JSON and performs all validation in one place.
+    Accepts either `category` **or** `category_id` (int PK) in the payload.
     """
 
-    # Accept a plain integer instead of a nested Category object
-    category_id = serializers.PrimaryKeyRelatedField(
-        source="category",
-        queryset=Category.objects.all(),
-        write_only=True,
-    )
+    # --- allow both aliases ------------------------------------------------ #
+    category = serializers.IntegerField(write_only=True, required=False)
+    category_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
         model = RecurringTransaction
-        # Expose every field except the FK that we rename to category_id
         fields = [
             "id",
-            "category_id",
+            "category",  # write-only
+            "category_id",  # write-only alias
             "amount",
             "type",
             "description",
@@ -122,9 +119,9 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
             "end_date",
             "active",
         ]
-        read_only_fields = ["id", "active"]  # active toggles automatically
+        read_only_fields = ["id", "active"]
 
-    # ---- field-level checks ------------------------------------------------ #
+    # ---- basic validations ------------------------------------------------ #
     def validate_amount(self, value):
         if value <= 0:
             raise serializers.ValidationError("Amount must be positive.")
@@ -132,12 +129,32 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
 
     def validate_rrule(self, value):
         try:
-            rrulestr(value, dtstart=timezone.now())
-        except Exception as exc:  # ValueError | TypeError
-            raise serializers.ValidationError("Invalid RRULE string.") from exc
+            rrulestr(value)  # will raise if invalid
+        except Exception:
+            raise serializers.ValidationError("Invalid RRULE string.")
         return value
 
-    # ---- object-level hook to stamp the user ------------------------------ #
-    def create(self, validated):
-        validated["user"] = self.context["request"].user
-        return super().create(validated)
+    # ---- normalise the category field  ----------------------------------- #
+    def _get_category(self, data):
+        from django.shortcuts import get_object_or_404
+
+        raw = data.pop("category", None) or data.pop("category_id", None)
+        return get_object_or_404(Category, pk=raw)
+
+    # ---- create / update -------------------------------------------------- #
+    def create(self, validated_data):
+        validated_data["user"] = self.context["request"].user
+        validated_data["category"] = self._get_category(validated_data)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if "category" in validated_data or "category_id" in validated_data:
+            validated_data["category"] = self._get_category(validated_data)
+        return super().update(instance, validated_data)
+
+    # ---- representation --------------------------------------------------- #
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep["category_id"] = instance.category_id  # echo for clients
+        rep.pop("category", None)  # keep output tidy
+        return rep
