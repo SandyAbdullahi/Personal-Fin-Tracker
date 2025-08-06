@@ -75,9 +75,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class SavingsGoalSerializer(serializers.ModelSerializer):
-    remaining_amount = serializers.DecimalField(
-        max_digits=10, decimal_places=2, read_only=True, source="remaining_amount"
-    )
+    remaining_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = SavingsGoal

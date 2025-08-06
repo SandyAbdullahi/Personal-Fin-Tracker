@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "django_filters",
+    "drf_spectacular",
     # Local
     "accounts",
     "finance",
@@ -114,7 +115,14 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Personal Finance Tracker API",
+    "DESCRIPTION": "Track incomes, expenses, savings goals and more.",
+    "VERSION": "0.1.0",
+}
+
 
 # ─── misc ──────────────────────────────────────────────────────────────────
 AUTH_USER_MODEL = "accounts.CustomUser"
