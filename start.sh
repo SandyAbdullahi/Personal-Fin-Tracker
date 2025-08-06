@@ -7,6 +7,7 @@ export PYTHONUNBUFFERED=1                           # log straight to stdout
 
 # ─── 2. Database migrations ─────────────────────────────────────────────────
 rm finance/migrations/0*.py && rm accounts/migrations/0*.py
+python manage.py makemigrations finance accounts
 python manage.py migrate --no-input
 
 # ─── 3. Collect static files  (only if you actually serve them) ─────────────
