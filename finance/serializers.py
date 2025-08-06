@@ -1,8 +1,11 @@
 # finance/serializers.py
+from datetime import timezone
+
+from dateutil.rrule import rrulestr
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 
-from .models import Category, SavingsGoal, Transaction
+from .models import Category, RecurringTransaction, SavingsGoal, Transaction
 
 
 class TransactionSerializer(serializers.ModelSerializer):
@@ -88,3 +91,53 @@ class SavingsGoalSerializer(serializers.ModelSerializer):
             "remaining_amount",
         ]
         read_only_fields = ["id", "remaining_amount"]
+
+
+# ──────────────────────────  RecurringTransaction  ────────────────────────── #
+
+
+class RecurringTransactionSerializer(serializers.ModelSerializer):
+    """
+    Converts the model <-> JSON and performs all validation in one place.
+    """
+
+    # Accept a plain integer instead of a nested Category object
+    category_id = serializers.PrimaryKeyRelatedField(
+        source="category",
+        queryset=Category.objects.all(),
+        write_only=True,
+    )
+
+    class Meta:
+        model = RecurringTransaction
+        # Expose every field except the FK that we rename to category_id
+        fields = [
+            "id",
+            "category_id",
+            "amount",
+            "type",
+            "description",
+            "rrule",
+            "next_occurrence",
+            "end_date",
+            "active",
+        ]
+        read_only_fields = ["id", "active"]  # active toggles automatically
+
+    # ---- field-level checks ------------------------------------------------ #
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Amount must be positive.")
+        return value
+
+    def validate_rrule(self, value):
+        try:
+            rrulestr(value, dtstart=timezone.now())
+        except Exception as exc:  # ValueError | TypeError
+            raise serializers.ValidationError("Invalid RRULE string.") from exc
+        return value
+
+    # ---- object-level hook to stamp the user ------------------------------ #
+    def create(self, validated):
+        validated["user"] = self.context["request"].user
+        return super().create(validated)

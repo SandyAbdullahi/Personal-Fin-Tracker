@@ -2,11 +2,15 @@
 from datetime import date, datetime, time
 
 from dateutil.rrule import rrulestr
+from rest_framework import permissions, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from finance.models import RecurringTransaction, Transaction
+
+from .permissions import IsOwnerOrReadOnly
+from .serializers import RecurringTransactionSerializer
 
 
 @api_view(["POST"])
@@ -56,3 +60,18 @@ def post_due_recurring_transactions(request):
             r.save(update_fields=["next_occurrence", "active"])
 
     return Response({"posted": count, "date": str(today)})
+
+
+class RecurringTransactionViewSet(viewsets.ModelViewSet):
+    """
+    Standard CRUD operations for recurring items, user-scoped.
+    """
+
+    serializer_class = RecurringTransactionSerializer
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+
+    def get_queryset(self):
+        return RecurringTransaction.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
