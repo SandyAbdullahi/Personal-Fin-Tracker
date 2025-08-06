@@ -6,12 +6,10 @@ export DJANGO_SETTINGS_MODULE=core.settings_ci      # same one you used in build
 export PYTHONUNBUFFERED=1                           # log straight to stdout
 
 # ─── 2. Database migrations ─────────────────────────────────────────────────
-rm finance/migrations/0*.py && rm accounts/migrations/0*.py
-python manage.py makemigrations finance accounts
 python manage.py migrate --no-input
 
 # ─── 3. Collect static files  (only if you actually serve them) ─────────────
-python manage.py collectstatic --no-input
+#python manage.py collectstatic --no-input
 
 # ─── 4. Launch the app with Gunicorn ────────────────────────────────────────
 #  -w: workers = $(CPU cores * 2) + 1   ─ adjust if you like
