@@ -116,6 +116,8 @@ REST_FRAMEWORK = {
         "django_filters.rest_framework.DjangoFilterBackend",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_PAGINATION_CLASS": "finance.pagination.StandardResultsSetPagination",
+    "PAGE_SIZE": 20,
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "Personal Finance Tracker API",

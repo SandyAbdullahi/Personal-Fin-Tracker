@@ -31,5 +31,5 @@ def test_user_cannot_see_others(factory_name, url_name, api_client):
     list_resp = api_client.get(reverse(url_name))
     detail_resp = api_client.get(reverse(url_name.replace("list", "detail"), args=[obj.pk]))
 
-    assert obj.pk not in [o["id"] for o in list_resp.data]
+    assert obj.pk not in [o["id"] for o in list_resp.data["results"]]
     assert detail_resp.status_code == status.HTTP_404_NOT_FOUND
