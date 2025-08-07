@@ -101,3 +101,14 @@ See SECURITY.md for details.
 
 License
 MIT – see LICENSE.
+
+### Interactive API docs
+
+After the server starts:
+
+* **Swagger UI** – http://localhost:8000/api/docs/
+* **Redoc**      – http://localhost:8000/api/redoc/
+* **Raw JSON**   – http://localhost:8000/api/schema/
+
+The schema is automatically generated via [drf-spectacular](https://drf-spectacular.readthedocs.io/).
+
