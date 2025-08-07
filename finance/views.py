@@ -43,23 +43,19 @@ class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
-    # Filtering / searching / ordering
     filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
     filterset_class = TransactionFilter
     search_fields = ["description"]
     ordering_fields = ["date", "amount", "id"]
-    ordering = ("-date", "-id")  # default
+
+    # 🔑  deterministic default: newest DB row first
+    ordering = ("-id",)  # ← change
 
     def get_queryset(self):
-        # most-recent insert first
-        return Transaction.objects.filter(user=self.request.user).order_by("-id")  # 👈  single, unambiguous ordering
+        return Transaction.objects.filter(user=self.request.user).order_by(*self.ordering)  # keep it in one place
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
-
-    # let DRF handle pagination headers; suppress its default Location header
-    def get_success_headers(self, data):
-        return {}
 
 
 # ─────────────────────────── Savings-Goal CRUD ───────────────────────────────
