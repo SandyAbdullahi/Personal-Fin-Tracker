@@ -154,3 +154,53 @@ class RecurringTransaction(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user} → {self.amount} {self.get_type_display()} @ {self.rrule}"
+
+
+class Budget(TimeStampedModel):
+    """
+    A spending limit (‐`limit`‐) for a *single* category over a period.
+
+    Period choices:
+      M → monthly   (resets every calendar month)
+      Q → quarterly (Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec)
+      Y → yearly    (Jan-Dec)
+    """
+
+    PERIOD_CHOICES = (
+        ("M", "Monthly"),
+        ("Q", "Quarterly"),
+        ("Y", "Yearly"),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="budgets",
+    )
+    category = models.ForeignKey(
+        "finance.Category",
+        on_delete=models.CASCADE,
+        related_name="budgets",
+    )
+    limit = models.DecimalField(max_digits=10, decimal_places=2)
+    period = models.CharField(max_length=1, choices=PERIOD_CHOICES, default="M")
+
+    class Meta:
+        # a user can’t have TWO monthly budgets for the same category
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "category", "period"],
+                name="unique_budget_per_period",
+            )
+        ]
+        ordering = ("-created",)
+
+    # trivial helper – nice for Django admin / str() tests
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.user} {self.category} {self.get_period_display()} → {self.limit}"
+
+    # defensive: ensure limit > 0 even if serializer is bypassed
+    def clean(self):
+        super().clean()
+        if self.limit <= Decimal("0"):
+            raise ValidationError({"limit": "Limit must be positive."})

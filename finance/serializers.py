@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Category, RecurringTransaction, SavingsGoal, Transaction
+from .models import Budget, Category, RecurringTransaction, SavingsGoal, Transaction
 
 # ─────────────────────────────── Transactions ────────────────────────────────
 
@@ -164,3 +164,33 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
         rep["category_id"] = instance.category_id
         rep.pop("category", None)
         return rep
+
+
+# ───────────────────────────  Budget  ─────────────────────────── #
+
+
+class BudgetSerializer(serializers.ModelSerializer):
+    """
+    Simple serializer used only by the unit-tests *for now*.
+    """
+
+    # we want just the PK, no nested representation
+    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
+
+    class Meta:
+        model = Budget
+        fields = ["id", "category", "limit", "period"]
+        read_only_fields = ["id"]
+
+    # -------- validation ---------- #
+    def validate_limit(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Limit must be positive.")
+        return value
+
+    # -------- create hook ---------- #
+    def create(self, validated):
+        # the view-set passes request in context; tests pass request_user directly
+        user = self.context.get("request").user if self.context.get("request") else self.context.get("request_user")
+        validated["user"] = user
+        return super().create(validated)
