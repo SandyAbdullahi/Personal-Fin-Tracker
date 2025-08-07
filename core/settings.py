@@ -1,91 +1,91 @@
+"""
+core/settings.py  ―  main runtime settings (Render & local)
+
+Environment variables expected:
+  • SECRET_KEY
+  • DEBUG               →  “True” or “False”
+  • DATABASE_URL        →  optional; Neon / Supabase / pg connection string
+  • INTERNAL_DATABASE_URL  (Render’s internal Postgres URL when present)
+
+You may keep settings_ci.py for pytest; this file is for normal runs.
+"""
+
 import os
 from pathlib import Path
 
 import dj_database_url
-import django_heroku
+import django_heroku  # keeps WhiteNoise & DB config happy on Render
 from decouple import config
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# ────────────────────────────────────────────────────────────────────────────────
+#  BASE & SECURITY
+# ────────────────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATABASE_URL = config("DATABASE_URL", default=None)
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config("SECRET_KEY")
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config("DEBUG", cast=bool)
+DEBUG = config("DEBUG", cast=bool, default=False)
 
 ALLOWED_HOSTS = [
-    ".onrender.com",
     "localhost",
     "127.0.0.1",
+    ".onrender.com",
     "personal-fin-tracker.onrender.com",
 ]
 
+CSRF_TRUSTED_ORIGINS = ["https://*.onrender.com"]
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# Static files
-STATIC_URL = "/static/"
-STATICFILES_DIRS = [BASE_DIR / "static"]
-# WhiteNoise settings
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-WHITENOISE_AUTOREFRESH = DEBUG  # auto-reload locally
-WHITENOISE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+# These only matter when DEBUG = False
+SECURE_SSL_REDIRECT = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30 if not DEBUG else 0  # 30 days
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
 
-# Application definition
+# ────────────────────────────────────────────────────────────────────────────────
+#  APPS
+# ────────────────────────────────────────────────────────────────────────────────
 INSTALLED_APPS = [
-    "django.contrib.contenttypes",
+    # Django
     "django.contrib.admin",
     "django.contrib.auth",
+    "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # 3rd-party
     "rest_framework",
     "rest_framework_simplejwt",
     "django_filters",
     "drf_spectacular",
-    # Custom apps
+    # Local
     "accounts",
     "finance",
 ]
 
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ],
-    "DEFAULT_FILTER_BACKENDS": [
-        "django_filters.rest_framework.DjangoFilterBackend",
-        "rest_framework.filters.OrderingFilter",
-    ],
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_PAGINATION_CLASS": "finance.pagination.StandardResultsSetPagination",
-    "PAGE_SIZE": 20,
-    "ORDERING_PARAM": "ordering",
-}
-SPECTACULAR_SETTINGS = {
-    "TITLE": "Personal Finance Tracker API",
-    "VERSION": "0.1.0",
-    "DESCRIPTION": "Public endpoints for categories, transactions, savings " "goals and recurring transactions.",
-    # generate shorter component names
-    "COMPONENT_SPLIT_REQUEST": True,
-}
+AUTH_USER_MODEL = "accounts.CustomUser"
 
-
+# ────────────────────────────────────────────────────────────────────────────────
+#  MIDDLEWARE  (WhiteNoise *immediately* after SecurityMiddleware)
+# ────────────────────────────────────────────────────────────────────────────────
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 
+# ────────────────────────────────────────────────────────────────────────────────
+#  TEMPLATES / WSGI
+# ────────────────────────────────────────────────────────────────────────────────
 ROOT_URLCONF = "core.urls"
-
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -101,62 +101,79 @@ TEMPLATES = [
         },
     },
 ]
-
 WSGI_APPLICATION = "core.wsgi.application"
 
-# Database
-
-# Use Render’s INTERNAL_DATABASE_URL if it exists.
-# Otherwise fall back to DATABASE_URL (works with Neon, Supabase, etc.),
-# and if *that*’s missing fall back to a local sqlite file.
+# ────────────────────────────────────────────────────────────────────────────────
+#  DATABASE  (Render → Neon → local sqlite fallback)
+# ────────────────────────────────────────────────────────────────────────────────
 DATABASES = {
     "default": dj_database_url.parse(
-        os.getenv("INTERNAL_DATABASE_URL")
-        or os.getenv("DATABASE_URL")  # e.g. your Neon string
-        or f"sqlite:///{BASE_DIR / 'db.sqlite3'}",  # dev fallback
+        os.getenv("INTERNAL_DATABASE_URL") or os.getenv("DATABASE_URL") or f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600,
         ssl_require=bool(os.getenv("INTERNAL_DATABASE_URL")),
     )
 }
-
-# Give Django something harmless for its test DB when this settings file *is*
-# used in tests (it usually isn’t – we have settings_ci.py for that).
 DATABASES["default"]["TEST"] = {"NAME": "test_db"}
 
-# Activate Render's static file and DB configs
-django_heroku.settings(locals())
+# ────────────────────────────────────────────────────────────────────────────────
+#  STATIC & WhiteNoise
+# ────────────────────────────────────────────────────────────────────────────────
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # collectstatic target
+STATICFILES_DIRS = [BASE_DIR / "static"]  # for local dev assets
 
-# Optional (production safety)
-CSRF_TRUSTED_ORIGINS = ["https://*.onrender.com"]
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+WHITENOISE_AUTOREFRESH = DEBUG  # auto-reload locally
+WHITENOISE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 
+# ────────────────────────────────────────────────────────────────────────────────
+#  Django-Rest-Framework & Spectacular
+# ────────────────────────────────────────────────────────────────────────────────
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_PAGINATION_CLASS": "finance.pagination.StandardResultsSetPagination",
+    "PAGE_SIZE": 20,
+    "ORDERING_PARAM": "ordering",
+}
 
-AUTH_USER_MODEL = "accounts.CustomUser"
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Personal Finance Tracker API",
+    "VERSION": "0.1.0",
+    "DESCRIPTION": ("Public endpoints for categories, transactions, savings " "goals and recurring transactions."),
+    "COMPONENT_SPLIT_REQUEST": True,
+}
 
-
-# Password validation
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
-]
-
-# Internationalization
+# ────────────────────────────────────────────────────────────────────────────────
+#  I18N / TZ  (Kenya)
+# ────────────────────────────────────────────────────────────────────────────────
 LANGUAGE_CODE = "en-us"
-
-TIME_ZONE = "Africa/Nairobi"  # Nairobi, Kenya
-
+TIME_ZONE = "Africa/Nairobi"  # ← Kenya
 USE_I18N = True
 USE_TZ = True
 
-# Default primary key field type
+# ────────────────────────────────────────────────────────────────────────────────
+#  PASSWORD VALIDATORS
+# ────────────────────────────────────────────────────────────────────────────────
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+# ────────────────────────────────────────────────────────────────────────────────
+#  DEFAULTS
+# ────────────────────────────────────────────────────────────────────────────────
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ────────────────────────────────────────────────────────────────────────────────
+#  Activate Heroku helper (static, DB) – harmless outside Heroku
+# ────────────────────────────────────────────────────────────────────────────────
+django_heroku.settings(locals())
