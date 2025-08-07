@@ -1,23 +1,29 @@
+# finance/views.py
 from django.db.models import F, Sum
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters as drf_filters
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .filters import TransactionFilter
+from .filters import CategoryFilter, SavingsGoalFilter, TransactionFilter
 from .models import Category, SavingsGoal, Transaction
 from .permissions import IsOwnerOrReadOnly
 from .serializers import CategorySerializer, SavingsGoalSerializer, TransactionSerializer
 
 
-# ────────────────────────────────────────────────
-#   Category CRUD
-# ────────────────────────────────────────────────
+# ─────────────────────────────── Category CRUD ────────────────────────────────
 class CategoryViewSet(viewsets.ModelViewSet):
+    """
+    CRUD actions for categories, per-user.
+    """
+
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CategoryFilter
 
     def get_queryset(self):
         return Category.objects.filter(user=self.request.user)
@@ -26,40 +32,47 @@ class CategoryViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-# ────────────────────────────────────────────────
-#   Transaction CRUD (user-scoped)
-# ────────────────────────────────────────────────
+# ───────────────────────────── Transaction CRUD ───────────────────────────────
 class TransactionViewSet(viewsets.ModelViewSet):
     """
-    Standard CRUD endpoint backed by TransactionSerializer.
-    Only returns the requesting user’s own transactions.
+    Standard CRUD endpoint for `Transaction`.
+    Default ordering: newest first (date ↓, then id ↓).
+    Clients can override with ?ordering=amount or ?ordering=-amount etc.
     """
 
-    queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
+    # Filtering / searching / ordering
+    filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
+    filterset_class = TransactionFilter
+    search_fields = ["description"]
+    ordering_fields = ["date", "amount", "id"]
+    ordering = ("-date", "-id")  # default
+
     def get_queryset(self):
-        return Transaction.objects.filter(user=self.request.user)
+        # most-recent insert first
+        return Transaction.objects.filter(user=self.request.user).order_by("-id")  # 👈  single, unambiguous ordering
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    # let DRF handle pagination headers; suppress its default Location header
     def get_success_headers(self, data):
         return {}
 
-    filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
-    filterset_class = TransactionFilter
-    ordering_fields = ["date", "amount", "id"]  # allowed
-    ordering = ["-date"]  # default
 
-
-# ────────────────────────────────────────────────
-#   Savings Goal CRUD (user-scoped)
-# ────────────────────────────────────────────────
+# ─────────────────────────── Savings-Goal CRUD ───────────────────────────────
 class SavingsGoalViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for `SavingsGoal` with filtering on the name field.
+    """
+
     serializer_class = SavingsGoalSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = SavingsGoalFilter
 
     def get_queryset(self):
         return SavingsGoal.objects.filter(user=self.request.user)
@@ -68,22 +81,23 @@ class SavingsGoalViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-# ────────────────────────────────────────────────
-#   Finance Summary Endpoint
-# ────────────────────────────────────────────────
+# ───────────────────────────── Finance summary ───────────────────────────────
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def summary(request):
     """
-    Returns total income, total expenses, per-category totals,
-    and savings-goal progress for the authenticated user.
-
+    Aggregate view returning:
+      • total income / expenses
+      • totals per category
+      • progress of each savings goal
     Optional query params:
-      ?start=YYYY-MM-DD   filter transactions from this date
-      ?end=YYYY-MM-DD     filter up to this date
+        ?start=YYYY-MM-DD   – from date
+        ?end=YYYY-MM-DD     – up to date
     """
+
     qs = Transaction.objects.filter(user=request.user)
 
+    # optional date filters
     start = request.GET.get("start")
     end = request.GET.get("end")
     if start:
@@ -94,20 +108,16 @@ def summary(request):
     income_total = qs.filter(type="IN").aggregate(t=Sum("amount"))["t"] or 0
     expense_total = qs.filter(type="EX").aggregate(t=Sum("amount"))["t"] or 0
 
-    by_category = (
-        qs.values(name=F("category__name"))  # ← valid expression alias
-        .annotate(total=Sum("amount"))
-        .order_by("-total")
-    )
+    by_category = qs.values(name=F("category__name")).annotate(total=Sum("amount")).order_by("-total")
 
     goal_data = [
         {
             "id": g.id,
             "name": g.name,
             "target": g.target_amount,
-            "saved": g.amount_saved,
-            "percent": (round((g.amount_saved / g.target_amount) * 100, 1) if g.target_amount else 0),
-            "deadline": g.deadline,
+            "saved": g.current_amount,
+            "percent": (round((g.current_amount / g.target_amount) * 100, 1) if g.target_amount else 0),
+            "deadline": g.target_date,
         }
         for g in request.user.goals.all()
     ]

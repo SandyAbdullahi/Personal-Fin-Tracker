@@ -1,15 +1,34 @@
 import django_filters as filters
 
-from .models import Transaction
+from .models import Category, SavingsGoal, Transaction
 
 
+# ───────────────────────── Category ──────────────────────────
+class CategoryFilter(filters.FilterSet):
+    class Meta:
+        model = Category
+        fields = {"name": ["icontains"]}
+
+
+# ──────────────────────── Transaction ────────────────────────
 class TransactionFilter(filters.FilterSet):
-    date_from = filters.DateFilter(field_name="date", lookup_expr="gte")
-    date_to = filters.DateFilter(field_name="date", lookup_expr="lte")
-
     class Meta:
         model = Transaction
         fields = {
-            "type": ["exact"],
             "category": ["exact"],
+            "type": ["exact"],
+            "amount": ["gte", "lte"],
+            "date": ["gte", "lte"],
+            "description": ["icontains"],
         }
+
+
+# ─────────────────────── SavingsGoal ────────────────────────
+class SavingsGoalFilter(filters.FilterSet):
+    """
+    Accepts `?name__icontains=` just like the failing test expects.
+    """
+
+    class Meta:
+        model = SavingsGoal
+        fields = {"name": ["icontains"]}
