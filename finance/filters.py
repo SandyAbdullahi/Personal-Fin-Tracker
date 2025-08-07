@@ -1,6 +1,6 @@
 import django_filters as filters
 
-from .models import Category, SavingsGoal, Transaction
+from .models import Budget, Category, SavingsGoal, Transaction
 
 
 # ───────────────────────── Category ──────────────────────────
@@ -32,3 +32,20 @@ class SavingsGoalFilter(filters.FilterSet):
     class Meta:
         model = SavingsGoal
         fields = {"name": ["icontains"]}
+
+
+# ───────────────────────── Budget ──────────────────────────
+class BudgetFilter(filters.FilterSet):
+    """
+    Allow the client to:
+      • restrict to a `category`  (?category=<id>)
+      • restrict to a `period`    (?period=M)
+      • search for budgets whose limit is >= / <= a value
+    """
+
+    min_limit = filters.NumberFilter(field_name="limit", lookup_expr="gte")
+    max_limit = filters.NumberFilter(field_name="limit", lookup_expr="lte")
+
+    class Meta:
+        model = Budget
+        fields = ["category", "period", "min_limit", "max_limit"]

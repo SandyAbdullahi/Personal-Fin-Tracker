@@ -7,10 +7,10 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .filters import CategoryFilter, SavingsGoalFilter, TransactionFilter
-from .models import Category, SavingsGoal, Transaction
+from .filters import BudgetFilter, CategoryFilter, SavingsGoalFilter, TransactionFilter
+from .models import Budget, Category, SavingsGoal, Transaction
 from .permissions import IsOwnerOrReadOnly
-from .serializers import CategorySerializer, SavingsGoalSerializer, TransactionSerializer
+from .serializers import BudgetSerializer, CategorySerializer, SavingsGoalSerializer, TransactionSerializer
 
 
 # ─────────────────────────────── Category CRUD ────────────────────────────────
@@ -126,3 +126,25 @@ def summary(request):
             "goals": goal_data,
         }
     )
+
+
+# ─────────────────────────────── Budget CRUD ────────────────────────────────
+class BudgetViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for a user-scoped `Budget`.
+    Default ordering: newest first (created ↓).
+    """
+
+    serializer_class = BudgetSerializer
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_class = BudgetFilter
+    ordering_fields = ["created", "limit"]
+    ordering = ("-created",)
+
+    def get_queryset(self):
+        return Budget.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
