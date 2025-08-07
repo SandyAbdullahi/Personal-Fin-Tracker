@@ -3,18 +3,17 @@ settings_ci.py
 ───────────────────────────────────────────────────────────────────────────────
 Settings that are *only* loaded in CI pipelines and during Render’s build stage.
 
-✦ Uses an in-memory SQLite DB -- lightning-fast, no secrets required
+✦ Uses an in-memory SQLite DB (lightning-fast, no secrets required)
 ✦ Keeps INSTALLED_APPS identical to production so migrations import cleanly
 ✦ Ships static assets with WhiteNoise (hashed filenames + gzip/brotli)
 """
 
 import os
-import sys
 from pathlib import Path
 
 import dj_database_url
 
-# ─── core ──────────────────────────────────────────────────────────────────
+# ─────────────────────────── core ────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = "ci-secret-key"
@@ -23,15 +22,14 @@ DEBUG = True
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
-    "personal-fin-tracker.onrender.com",  # Render custom domain
+    "personal-fin-tracker.onrender.com",
 ]
 
-# Render adds this env var for every deploy/preview URL
-RENDER_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")
-if RENDER_HOSTNAME:
-    ALLOWED_HOSTS.append(RENDER_HOSTNAME)
+# Render preview/production URLs
+if host := os.getenv("RENDER_EXTERNAL_HOSTNAME"):
+    ALLOWED_HOSTS.append(host)
 
-# ─── apps / middleware ─────────────────────────────────────────────────────
+# ───────────────────────── apps & middleware ────────────────────────────────
 INSTALLED_APPS = [
     # Django
     "django.contrib.admin",
@@ -40,7 +38,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # 3rd-party
+    # 3ʳᵈ-party
     "rest_framework",
     "rest_framework_simplejwt",
     "django_filters",
@@ -52,7 +50,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",  # ← must be directly after Security
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # ← must follow Security
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -64,38 +62,35 @@ MIDDLEWARE = [
 ROOT_URLCONF = "core.urls"
 WSGI_APPLICATION = "core.wsgi.application"
 
-# ─── database (in-memory) ──────────────────────────────────────────────────
+# ─────────────────────────── database ───────────────────────────────────────
+#
+# • In CI we don’t want a Postgres container, so default to SQLite-in-memory.
+# • If DATABASE_URL *is* defined (e.g. on Render preview builds), use that.
+#
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL and not DEBUG:
-    sys.stderr.write("❌  DATABASE_URL must be set in production\n")
-    sys.exit(1)
 
 DATABASES = {
     "default": dj_database_url.parse(
-        DATABASE_URL or "sqlite:///db.sqlite3",  # dev fallback only
+        DATABASE_URL or "sqlite://:memory:",
         conn_max_age=600,
     )
 }
 
-# ─── static files ──────────────────────────────────────────────────────────
+# ───────────────────────── static files / WhiteNoise ────────────────────────
 STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"  # ← only *one* definition now
-STATICFILES_DIRS = [BASE_DIR / "static"]  # your own assets (optional)
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
-# WhiteNoise settings
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+}
+
 WHITENOISE_AUTOREFRESH = DEBUG  # auto-reload locally
 WHITENOISE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 
-# Django 4.x prefers the new STORAGES setting; this replaces the old
-# STATICFILES_STORAGE key and avoids duplicate configs.
-# STORAGES = {
-#     "staticfiles": {
-#         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-#     }
-# }
-
-# ─── templates (admin needs this) ──────────────────────────────────────────
+# ─────────────────────────── templates ──────────────────────────────────────
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -112,7 +107,7 @@ TEMPLATES = [
     }
 ]
 
-# ─── DRF defaults ──────────────────────────────────────────────────────────
+# ─────────────────────────── DRF defaults ───────────────────────────────────
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -126,19 +121,19 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
     "ORDERING_PARAM": "ordering",
 }
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "Personal Finance Tracker API",
     "VERSION": "0.1.0",
-    "DESCRIPTION": "Public endpoints for categories, transactions, savings " "goals and recurring transactions.",
-    # generate shorter component names
+    "DESCRIPTION": ("Public endpoints for categories, transactions, savings goals " "and recurring transactions."),
     "COMPONENT_SPLIT_REQUEST": True,
 }
 
-
-# ─── misc ──────────────────────────────────────────────────────────────────
+# ─────────────────────────── misc / i18n ────────────────────────────────────
 AUTH_USER_MODEL = "accounts.CustomUser"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+TIME_ZONE = "Africa/Nairobi"  # ← Kenya
 USE_I18N = True
 USE_TZ = True
