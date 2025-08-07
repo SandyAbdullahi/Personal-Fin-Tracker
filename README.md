@@ -2,9 +2,9 @@
 
 A full-featured Django + DRF back-end for tracking expenses, income, savings goals and recurring transactions.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/<your-org>/<repo>/ci.yml?label=tests)](./actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/SandyAbdullahi/Personal-Fin-Tracker/ci.yml?label=tests)](./actions)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](./htmlcov)
-[![License](https://img.shields.io/github/license/<your-org>/<repo>)](/LICENSE)
+[![License](https://img.shields.io/github/license/SandyAbdullahi/Personal-Fin-Tracker)](/LICENSE)
 
 ---
 
