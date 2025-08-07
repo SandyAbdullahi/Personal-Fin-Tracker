@@ -1,15 +1,16 @@
 # finance/serializers.py
-
-
 from dateutil.rrule import rrulestr
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Category, RecurringTransaction, SavingsGoal, Transaction
 
+# ─────────────────────────────── Transactions ────────────────────────────────
+
 
 class TransactionSerializer(serializers.ModelSerializer):
-    # Accept both names for the incoming integer
+    # Accept **either** alias when clients post data
     category_id = serializers.IntegerField(write_only=True, required=False)
     category = serializers.IntegerField(write_only=True, required=False)
 
@@ -18,18 +19,18 @@ class TransactionSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "category_id",  # write-only alias
-            "category",  # write-only (for legacy tests)
+            "category",  # write-only (legacy)
             "amount",
             "type",
             "description",
             "date",
         )
 
-    # ------------------------------------------------------------------ #
-    # Field-level validation
-    # ------------------------------------------------------------------ #
+    # --------------------------------------------------------------------- #
+    # Field-level validation helpers
+    # --------------------------------------------------------------------- #
     def _resolve_category(self, value):
-        """Return the Category instance or raise 404/400."""
+        """Return a Category *instance* or raise 404/400."""
         return get_object_or_404(Category, pk=value)
 
     def validate_category_id(self, value):
@@ -43,24 +44,26 @@ class TransactionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Amount must be positive.")
         return value
 
-    # ------------------------------------------------------------------ #
+    # --------------------------------------------------------------------- #
     # Create / update hooks
-    # ------------------------------------------------------------------ #
+    # --------------------------------------------------------------------- #
     def create(self, validated_data):
         # Pull whichever alias was provided
-        category = validated_data.pop("category", None) or validated_data.pop("category_id", None)
-        validated_data["category"] = category
+        category_obj = validated_data.pop("category", None) or validated_data.pop("category_id", None)
 
-        # Stamp user if request is in context
+        # Always pass the FK **integer** to the ORM
+        validated_data["category_id"] = category_obj.pk if hasattr(category_obj, "pk") else category_obj
+
+        # Stamp the user automatically (if request present)
         request = self.context.get("request")
         if request and request.user.is_authenticated:
             validated_data["user"] = request.user
 
         return super().create(validated_data)
 
-    # ------------------------------------------------------------------ #
+    # --------------------------------------------------------------------- #
     # Representation
-    # ------------------------------------------------------------------ #
+    # --------------------------------------------------------------------- #
     def to_representation(self, instance):
         rep = super().to_representation(instance)
         rep["category_id"] = instance.category_id  # echo for clients
@@ -68,13 +71,16 @@ class TransactionSerializer(serializers.ModelSerializer):
         return rep
 
 
-# ---------------------------- other serializers ---------------------------- #
+# ─────────────────────────────── Categories ─────────────────────────────────
 
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["id", "name"]
+
+
+# ───────────────────────────── Savings Goals ────────────────────────────────
 
 
 class SavingsGoalSerializer(serializers.ModelSerializer):
@@ -93,24 +99,24 @@ class SavingsGoalSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "remaining_amount"]
 
 
-# ──────────────────────────  RecurringTransaction  ────────────────────────── #
+# ──────────────────────── Recurring Transactions ────────────────────────────
 
 
 class RecurringTransactionSerializer(serializers.ModelSerializer):
     """
-    Accepts either `category` **or** `category_id` (int PK) in the payload.
+    Accepts **either** `category_id` or `category`.
+    DRF will still render the FK back as an integer `category_id`.
     """
 
-    # --- allow both aliases ------------------------------------------------ #
-    category = serializers.IntegerField(write_only=True, required=False)
     category_id = serializers.IntegerField(write_only=True, required=False)
+    category = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
         model = RecurringTransaction
         fields = [
             "id",
-            "category",  # write-only
             "category_id",  # write-only alias
+            "category",  # write-only (legacy)
             "amount",
             "type",
             "description",
@@ -121,7 +127,16 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "active"]
 
-    # ---- basic validations ------------------------------------------------ #
+    # ───────────── field-level validation ───────────── #
+    def _resolve_category(self, value):
+        return get_object_or_404(Category, pk=value)
+
+    def validate_category_id(self, value):
+        return self._resolve_category(value)
+
+    def validate_category(self, value):
+        return self._resolve_category(value)
+
     def validate_amount(self, value):
         if value <= 0:
             raise serializers.ValidationError("Amount must be positive.")
@@ -129,32 +144,23 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
 
     def validate_rrule(self, value):
         try:
-            rrulestr(value)  # will raise if invalid
-        except Exception:
-            raise serializers.ValidationError("Invalid RRULE string.")
+            rrulestr(value, dtstart=timezone.now())
+        except Exception as exc:
+            raise serializers.ValidationError("Invalid RRULE string.") from exc
         return value
 
-    # ---- normalise the category field  ----------------------------------- #
-    def _get_category(self, data):
-        from django.shortcuts import get_object_or_404
+    # ───────────── create hook ───────────── #
+    def create(self, validated):
+        # pick whichever alias was supplied
+        cat_obj = validated.pop("category", None) or validated.pop("category_id", None)
+        validated["category_id"] = cat_obj.pk if hasattr(cat_obj, "pk") else cat_obj
 
-        raw = data.pop("category", None) or data.pop("category_id", None)
-        return get_object_or_404(Category, pk=raw)
+        validated["user"] = self.context["request"].user
+        return super().create(validated)
 
-    # ---- create / update -------------------------------------------------- #
-    def create(self, validated_data):
-        validated_data["user"] = self.context["request"].user
-        validated_data["category"] = self._get_category(validated_data)
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        if "category" in validated_data or "category_id" in validated_data:
-            validated_data["category"] = self._get_category(validated_data)
-        return super().update(instance, validated_data)
-
-    # ---- representation --------------------------------------------------- #
+    # ───────────── representation ───────────── #
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        rep["category_id"] = instance.category_id  # echo for clients
-        rep.pop("category", None)  # keep output tidy
+        rep["category_id"] = instance.category_id
+        rep.pop("category", None)
         return rep
