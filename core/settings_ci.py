@@ -123,8 +123,10 @@ REST_FRAMEWORK = {
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "Personal Finance Tracker API",
-    "DESCRIPTION": "Track incomes, expenses, savings goals and more.",
     "VERSION": "0.1.0",
+    "DESCRIPTION": "Public endpoints for categories, transactions, savings " "goals and recurring transactions.",
+    # generate shorter component names
+    "COMPONENT_SPLIT_REQUEST": True,
 }
 
 
