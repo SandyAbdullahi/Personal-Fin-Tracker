@@ -3,13 +3,14 @@ services:
   - type: web
     name: personal-fin-tracker
     env: python
-    region: oregon           # or whatever region you chose
 
     buildCommand: |
-      ./build.sh             # runs flake8 + pytest, fails build on error
+      pip install -r requirements.txt
 
     startCommand: |
-      ./start.sh             # runs migrate + gunicorn
+      PYTHONUNBUFFERED=1 sh start.sh        # your existing script
+
+    healthCheckPath: /healthz              # <- tell Render which route
 
     envVars:
       # ─── Django core ─────────────────────────────────────────

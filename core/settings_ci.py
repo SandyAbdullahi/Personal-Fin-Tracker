@@ -82,13 +82,18 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"  # ← only *one* definition now
 STATICFILES_DIRS = [BASE_DIR / "static"]  # your own assets (optional)
 
+# WhiteNoise settings
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+WHITENOISE_AUTOREFRESH = DEBUG  # auto-reload locally
+WHITENOISE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+
 # Django 4.x prefers the new STORAGES setting; this replaces the old
 # STATICFILES_STORAGE key and avoids duplicate configs.
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    }
-}
+# STORAGES = {
+#     "staticfiles": {
+#         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+#     }
+# }
 
 # ─── templates (admin needs this) ──────────────────────────────────────────
 TEMPLATES = [

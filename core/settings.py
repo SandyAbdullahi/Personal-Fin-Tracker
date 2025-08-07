@@ -29,7 +29,10 @@ ALLOWED_HOSTS = [
 # Static files
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+# WhiteNoise settings
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+WHITENOISE_AUTOREFRESH = DEBUG  # auto-reload locally
+WHITENOISE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 
 # Application definition
 INSTALLED_APPS = [
