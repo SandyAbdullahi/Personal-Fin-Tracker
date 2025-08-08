@@ -11,9 +11,13 @@ from tests.factories import DebtFactory, UserFactory
 def test_payment_serializer_validates_and_updates_balance():
     u = UserFactory()
     debt = DebtFactory(user=u, principal=Decimal("5000"))
+
     data = {"debt": debt.id, "amount": "500", "date": "2025-08-15"}
     s = PaymentSerializer(data=data, context={"request": type("R", (), {"user": u})})
     assert s.is_valid(), s.errors
-    _ = s.save()
+
+    pay = s.save()
+    assert pay.amount == Decimal("500")  # ← now `pay` is used
+
     debt.refresh_from_db()
     assert debt.balance == Decimal("4500")
