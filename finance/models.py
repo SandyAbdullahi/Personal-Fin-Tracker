@@ -190,3 +190,30 @@ class Budget(TimeStampedModel):
     @spent.setter  # same dummy setter
     def spent(self, _):
         pass
+
+
+# ───────────────────────────────── Debts and Payments ──────────────────────────────────
+class Debt(TimeStampedModel):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="debts")
+    name = models.CharField(max_length=64)
+    principal = models.DecimalField(max_digits=12, decimal_places=2)
+    interest_rate = models.DecimalField(max_digits=5, decimal_places=2, help_text="% per annum")
+    minimum_payment = models.DecimalField(max_digits=10, decimal_places=2)
+    opened_date = models.DateField(blank=True, null=True)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created",)
+
+    @property
+    def balance(self):
+        paid = self.payments.aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
+        return self.principal - paid
+
+
+class Payment(TimeStampedModel):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="payments")
+    debt = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name="payments")
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    date = models.DateField()
+    memo = models.CharField(max_length=128, blank=True)

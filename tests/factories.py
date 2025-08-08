@@ -1,9 +1,9 @@
-import decimal
+from decimal import Decimal
 
 import factory
 from django.contrib.auth import get_user_model
 
-from finance.models import Budget, Category, SavingsGoal, Transaction
+from finance.models import Budget, Category, Debt, Payment, SavingsGoal, Transaction
 
 User = get_user_model()
 
@@ -64,5 +64,26 @@ class BudgetFactory(factory.django.DjangoModelFactory):
     user = factory.LazyAttribute(lambda obj: obj.category.user)
 
     # simple fields
-    limit = decimal.Decimal("1000.00")
+    limit = Decimal("1000.00")
     period = "M"  # "M" (Monthly) / "W" / "Y" – adjust to your choices
+
+
+class DebtFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Debt
+
+    user = factory.SubFactory(UserFactory)
+    name = factory.Sequence(lambda n: f"Debt{n}")
+    principal = Decimal("1000")
+    interest_rate = Decimal("5")
+    minimum_payment = Decimal("50")
+
+
+class PaymentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Payment
+
+    user = factory.SubFactory(UserFactory)
+    debt = factory.SubFactory(DebtFactory)
+    amount = Decimal("100")
+    date = factory.Faker("date_this_year")

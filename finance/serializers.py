@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Budget, Category, RecurringTransaction, SavingsGoal, Transaction
+from .models import Budget, Category, Debt, Payment, RecurringTransaction, SavingsGoal, Transaction
 
 # ─────────────────────────────── Transactions ────────────────────────────────
 
@@ -205,4 +205,57 @@ class BudgetSerializer(serializers.ModelSerializer):
         # the view-set passes request in context; tests pass request_user directly
         user = self.context.get("request").user if self.context.get("request") else self.context.get("request_user")
         validated["user"] = user
+        return super().create(validated)
+
+
+# -------- Debt ----------------------------
+class DebtSerializer(serializers.ModelSerializer):
+    balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all(), required=False, allow_null=True)
+
+    class Meta:
+        model = Debt
+        fields = [
+            "id",
+            "name",
+            "principal",
+            "interest_rate",
+            "minimum_payment",
+            "opened_date",
+            "category",
+            "balance",
+        ]
+        read_only_fields = ["id", "balance"]
+
+    # ------- field-level validation ----------
+    def validate_principal(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Principal must be positive.")
+        return value
+
+    def validate_minimum_payment(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Minimum payment must be positive.")
+        return value
+
+    # ------- create hook (stamp user) --------
+    def create(self, validated):
+        validated["user"] = self.context["request"].user
+        return super().create(validated)
+
+
+# -------- Payment --------------------------
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ["id", "debt", "amount", "date", "memo"]
+        read_only_fields = ["id"]
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Amount must be positive.")
+        return value
+
+    def create(self, validated):
+        validated["user"] = self.context["request"].user
         return super().create(validated)

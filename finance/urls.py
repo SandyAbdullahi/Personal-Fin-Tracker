@@ -3,6 +3,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import BudgetViewSet, CategoryViewSet, SavingsGoalViewSet, TransactionViewSet, summary
+from .views_debt import DebtViewSet, PaymentViewSet
 from .views_recurring import RecurringTransactionViewSet, post_due_recurring_transactions
 
 app_name = "finance"
@@ -13,6 +14,8 @@ router.register(r"categories", CategoryViewSet, basename="categories")  # 👈 p
 router.register(r"goals", SavingsGoalViewSet, basename="goals")  # 👈 plural
 router.register(r"recurrings", RecurringTransactionViewSet, basename="recurrings")
 router.register(r"budgets", BudgetViewSet, basename="budgets")
+router.register(r"debts", DebtViewSet, basename="debts")
+router.register(r"payments", PaymentViewSet, basename="payments")
 
 urlpatterns = [
     path("summary/", summary, name="summary"),
