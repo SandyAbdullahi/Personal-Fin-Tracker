@@ -177,10 +177,22 @@ class BudgetSerializer(serializers.ModelSerializer):
     # we want just the PK, no nested representation
     category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
 
+    amount_spent = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True, source="spent")
+    remaining = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    percent_used = serializers.FloatField(read_only=True)
+
     class Meta:
         model = Budget
-        fields = ["id", "category", "limit", "period"]
-        read_only_fields = ["id"]
+        fields = [
+            "id",
+            "category",
+            "limit",
+            "period",
+            "amount_spent",
+            "remaining",
+            "percent_used",
+        ]
+        read_only_fields = ["id", "amount_spent", "remaining", "percent_used"]
 
     # -------- validation ---------- #
     def validate_limit(self, value):

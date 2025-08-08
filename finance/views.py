@@ -1,5 +1,9 @@
 # finance/views.py
-from django.db.models import F, Sum
+from decimal import Decimal
+
+from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, OuterRef, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
@@ -15,9 +19,7 @@ from .serializers import BudgetSerializer, CategorySerializer, SavingsGoalSerial
 
 # ─────────────────────────────── Category CRUD ────────────────────────────────
 class CategoryViewSet(viewsets.ModelViewSet):
-    """
-    CRUD actions for categories, per-user.
-    """
+    """CRUD actions for categories (per-user)."""
 
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
@@ -36,8 +38,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class TransactionViewSet(viewsets.ModelViewSet):
     """
     Standard CRUD endpoint for `Transaction`.
-    Default ordering: newest first (date ↓, then id ↓).
-    Clients can override with ?ordering=amount or ?ordering=-amount etc.
+    Default ordering: newest first (id ↓).
     """
 
     serializer_class = TransactionSerializer
@@ -47,12 +48,10 @@ class TransactionViewSet(viewsets.ModelViewSet):
     filterset_class = TransactionFilter
     search_fields = ["description"]
     ordering_fields = ["date", "amount", "id"]
-
-    # 🔑  deterministic default: newest DB row first
-    ordering = ("-id",)  # ← change
+    ordering = ("-id",)  # deterministic default
 
     def get_queryset(self):
-        return Transaction.objects.filter(user=self.request.user).order_by(*self.ordering)  # keep it in one place
+        return Transaction.objects.filter(user=self.request.user).order_by(*self.ordering)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -60,9 +59,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
 # ─────────────────────────── Savings-Goal CRUD ───────────────────────────────
 class SavingsGoalViewSet(viewsets.ModelViewSet):
-    """
-    CRUD for `SavingsGoal` with filtering on the name field.
-    """
+    """CRUD for `SavingsGoal` (name filter supported)."""
 
     serializer_class = SavingsGoalSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
@@ -90,10 +87,8 @@ def summary(request):
         ?start=YYYY-MM-DD   – from date
         ?end=YYYY-MM-DD     – up to date
     """
-
     qs = Transaction.objects.filter(user=request.user)
 
-    # optional date filters
     start = request.GET.get("start")
     end = request.GET.get("end")
     if start:
@@ -132,7 +127,10 @@ def summary(request):
 class BudgetViewSet(viewsets.ModelViewSet):
     """
     CRUD for a user-scoped `Budget`.
-    Default ordering: newest first (created ↓).
+    The queryset is annotated with:
+      • spent        – total expenses in the current month
+      • remaining    – limit − spent
+      • percent_used – (spent / limit) × 100
     """
 
     serializer_class = BudgetSerializer
@@ -140,11 +138,49 @@ class BudgetViewSet(viewsets.ModelViewSet):
 
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = BudgetFilter
-    ordering_fields = ["created", "limit"]
+    ordering_fields = ["created", "limit", "spent", "remaining", "percent_used"]
     ordering = ("-created",)
 
+    # ------------------------------------------------------------------ #
     def get_queryset(self):
-        return Budget.objects.filter(user=self.request.user)
+        user = self.request.user
+        today = timezone.localdate()
 
+        # sub-query → total expenses in this category for the current month
+        monthly_total = (
+            Transaction.objects.filter(
+                user=OuterRef("user"),
+                category=OuterRef("category"),
+                type="EX",
+                date__year=today.year,
+                date__month=today.month,
+            )
+            .values("category")
+            .annotate(total=Sum("amount"))
+            .values("total")[:1]
+        )
+
+        # one reusable expression
+        spent_expr = Coalesce(
+            Subquery(
+                monthly_total,
+                output_field=DecimalField(max_digits=10, decimal_places=2),
+            ),
+            Value(Decimal("0.00")),
+        )
+
+        return Budget.objects.filter(user=user).annotate(
+            spent=spent_expr,  # alias for ordering
+            remaining=ExpressionWrapper(
+                F("limit") - spent_expr,
+                output_field=DecimalField(max_digits=10, decimal_places=2),
+            ),
+            percent_used=ExpressionWrapper(
+                spent_expr * Value(Decimal("100.00")) / F("limit"),
+                output_field=FloatField(),
+            ),
+        )
+
+    # ------------------------------------------------------------------ #
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)

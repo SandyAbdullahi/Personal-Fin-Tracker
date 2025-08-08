@@ -1,7 +1,9 @@
+import decimal
+
 import factory
 from django.contrib.auth import get_user_model
 
-from finance.models import Category, SavingsGoal, Transaction
+from finance.models import Budget, Category, SavingsGoal, Transaction
 
 User = get_user_model()
 
@@ -42,3 +44,25 @@ class SavingsGoalFactory(factory.django.DjangoModelFactory):
     name = "Vacation"
     target_amount = 1000
     current_amount = 100
+
+
+class BudgetFactory(factory.django.DjangoModelFactory):
+    """
+    Creates a Budget that’s automatically linked to:
+      • the same `user` as its Category
+      • a sensible default limit (KES 1 000) and a monthly period
+    Override any field in your tests, e.g.:
+        BudgetFactory(limit=500, period="W")
+    """
+
+    class Meta:
+        model = Budget
+        django_get_or_create = ("user", "category", "period")
+
+    # relations
+    category = factory.SubFactory(CategoryFactory)
+    user = factory.LazyAttribute(lambda obj: obj.category.user)
+
+    # simple fields
+    limit = decimal.Decimal("1000.00")
+    period = "M"  # "M" (Monthly) / "W" / "Y" – adjust to your choices
