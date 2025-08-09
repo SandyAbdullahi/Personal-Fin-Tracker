@@ -1,6 +1,6 @@
 import django_filters as filters
 
-from .models import Budget, Category, SavingsGoal, Transaction
+from .models import Budget, Category, SavingsGoal, Transaction, Transfer
 
 
 # ───────────────────────── Category ──────────────────────────
@@ -49,3 +49,15 @@ class BudgetFilter(filters.FilterSet):
     class Meta:
         model = Budget
         fields = ["category", "period", "min_limit", "max_limit"]
+
+
+# ───────────────────────── Transfer ──────────────────────────
+class TransferFilter(filters.FilterSet):
+    class Meta:
+        model = Transfer
+        fields = {
+            "source_category": ["exact"],
+            "destination_category": ["exact"],
+            "date": ["gte", "lte", "exact"],
+            "amount": ["gte", "lte"],
+        }

@@ -11,7 +11,7 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .filters import BudgetFilter, CategoryFilter, SavingsGoalFilter, TransactionFilter
+from .filters import BudgetFilter, CategoryFilter, SavingsGoalFilter, TransactionFilter, TransferFilter
 from .models import Budget, Category, SavingsGoal, Transaction, Transfer
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
@@ -200,8 +200,9 @@ class BudgetViewSet(viewsets.ModelViewSet):
 class TransferViewSet(viewsets.ModelViewSet):
     serializer_class = TransferSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
-    filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ["source_category", "destination_category", "date"]
+    filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
+    filterset_class = TransferFilter
+    search_fields = ["description"]
     ordering_fields = ["date", "amount", "id"]
     ordering = ("-date", "-id")
 

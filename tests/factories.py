@@ -2,8 +2,10 @@ from decimal import Decimal
 
 import factory
 from django.contrib.auth import get_user_model
+from django.utils import timezone
+from factory.django import DjangoModelFactory
 
-from finance.models import Budget, Category, Debt, Payment, SavingsGoal, Transaction
+from finance.models import Budget, Category, Debt, Payment, SavingsGoal, Transaction, Transfer
 
 User = get_user_model()
 
@@ -87,3 +89,48 @@ class PaymentFactory(factory.django.DjangoModelFactory):
     debt = factory.SubFactory(DebtFactory)
     amount = Decimal("100")
     date = factory.Faker("date_this_year")
+
+
+class TransferFactory(DjangoModelFactory):
+    class Meta:
+        model = Transfer
+
+    user = factory.SubFactory(UserFactory)
+    # Default categories belong to the same user
+    source_category = factory.LazyAttribute(lambda o: CategoryFactory(user=o.user))
+    destination_category = factory.LazyAttribute(lambda o: CategoryFactory(user=o.user))
+
+    amount = Decimal("50.00")
+    date = factory.LazyFunction(timezone.localdate)
+    description = factory.Faker("sentence", nb_words=4)
+
+    # Optional: create the paired transactions automatically.
+    # Pass with_transactions=False to skip.
+    @factory.post_generation
+    def with_transactions(self, create, extracted, **kwargs):
+        if not create:
+            return
+        create_pair = True if extracted is None else bool(extracted)
+        if create_pair:
+            Transaction.objects.bulk_create(
+                [
+                    Transaction(
+                        user=self.user,
+                        category=self.source_category,
+                        amount=self.amount,
+                        type="EX",
+                        description=self.description,
+                        date=self.date,
+                        transfer=self,
+                    ),
+                    Transaction(
+                        user=self.user,
+                        category=self.destination_category,
+                        amount=self.amount,
+                        type="IN",
+                        description=self.description,
+                        date=self.date,
+                        transfer=self,
+                    ),
+                ]
+            )
