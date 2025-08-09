@@ -51,6 +51,15 @@ class Transaction(TimeStampedModel):
         blank=True,
     )
 
+    # link back to a transfer when this row was produced by a Transfer action
+    transfer = models.ForeignKey(
+        "Transfer",
+        on_delete=models.CASCADE,
+        related_name="transactions",
+        null=True,
+        blank=True,
+    )
+
     def __str__(self) -> str:  # pragma: no cover
         desc = f"{self.description} " if self.description else ""
         sign = "+" if self.type == self.Type.INCOME else "-"
@@ -217,3 +226,30 @@ class Payment(TimeStampedModel):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField()
     memo = models.CharField(max_length=128, blank=True)
+
+
+# ─────────────────────────────── Transfers ────────────────────────────────
+class Transfer(TimeStampedModel):
+    """
+    Move money between two categories by creating a paired Transaction:
+      • source  → Expense (EX)   –amount
+      • dest    → Income  (IN)   +amount
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="transfers")
+    source_category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="transfers_out")
+    destination_category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="transfers_in")
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    date = models.DateField()
+    description = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ("-date", "-id")
+
+    def clean(self):
+        if self.source_category_id and self.destination_category_id:
+            if self.source_category_id == self.destination_category_id:
+                raise ValidationError({"destination_category": "Source and destination must differ."})
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"Transfer {self.amount} {self.source_category} → {self.destination_category} on {self.date}"

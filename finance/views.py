@@ -12,9 +12,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .filters import BudgetFilter, CategoryFilter, SavingsGoalFilter, TransactionFilter
-from .models import Budget, Category, SavingsGoal, Transaction
+from .models import Budget, Category, SavingsGoal, Transaction, Transfer
 from .permissions import IsOwnerOrReadOnly
-from .serializers import BudgetSerializer, CategorySerializer, SavingsGoalSerializer, TransactionSerializer
+from .serializers import (
+    BudgetSerializer,
+    CategorySerializer,
+    SavingsGoalSerializer,
+    TransactionSerializer,
+    TransferSerializer,
+)
 
 
 # ─────────────────────────────── Category CRUD ────────────────────────────────
@@ -184,3 +190,14 @@ class BudgetViewSet(viewsets.ModelViewSet):
     # ------------------------------------------------------------------ #
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+
+# ─────────────────────────────── Transfer Views ────────────────────────────────
+class TransferViewSet(viewsets.ModelViewSet):
+    serializer_class = TransferSerializer
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    ordering = ("-date", "-id")
+
+    def get_queryset(self):
+        return Transfer.objects.filter(user=self.request.user)
