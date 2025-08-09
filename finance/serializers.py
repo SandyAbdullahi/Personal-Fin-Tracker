@@ -286,9 +286,13 @@ class TransferSerializer(serializers.ModelSerializer):
     # cross-field validation
 
     def validate(self, attrs):
-        if attrs["source_category"] == attrs["destination_category"]:
-            # Put the error on non_field_errors (what the test expects)
+        src = attrs["source_category"]
+        dst = attrs["destination_category"]
+        if src == dst:
             raise serializers.ValidationError("Source and destination must be different.")
+        user = self.context["request"].user
+        if src.user_id != user.id or dst.user_id != user.id:
+            raise serializers.ValidationError("Both categories must belong to you.")
         return attrs
 
     def create(self, validated: Dict[str, Any]) -> Transfer:

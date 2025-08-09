@@ -1,7 +1,7 @@
 # finance/views.py
 from decimal import Decimal
 
-from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, OuterRef, Subquery, Sum, Value
+from django.db.models import Case, DecimalField, ExpressionWrapper, F, FloatField, OuterRef, Subquery, Sum, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -181,8 +181,12 @@ class BudgetViewSet(viewsets.ModelViewSet):
                 F("limit") - spent_expr,
                 output_field=DecimalField(max_digits=10, decimal_places=2),
             ),
-            percent_used=ExpressionWrapper(
-                spent_expr * Value(Decimal("100.00")) / F("limit"),
+            percent_used=Case(
+                When(limit=0, then=Value(0.0)),
+                default=ExpressionWrapper(
+                    spent_expr * Value(Decimal("100.00")) / F("limit"),
+                    output_field=FloatField(),
+                ),
                 output_field=FloatField(),
             ),
         )
@@ -197,6 +201,8 @@ class TransferViewSet(viewsets.ModelViewSet):
     serializer_class = TransferSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ["source_category", "destination_category", "date"]
+    ordering_fields = ["date", "amount", "id"]
     ordering = ("-date", "-id")
 
     def get_queryset(self):
