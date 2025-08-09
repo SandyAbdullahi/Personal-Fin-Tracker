@@ -277,65 +277,131 @@ class TransferSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id"]
 
-    # field-level amount validation → error attaches to "amount"
+    # amount-level validation (attaches error to "amount")
     def validate_amount(self, value: Decimal) -> Decimal:
         if value <= 0:
             raise serializers.ValidationError("Amount must be positive.")
         return value
 
-    # cross-field validation
-
+    # cross-field validation — works for partial updates, too
     def validate(self, attrs):
-        src = attrs["source_category"]
-        dst = attrs["destination_category"]
-        if src == dst:
+        src = attrs.get("source_category")
+        dst = attrs.get("destination_category")
+
+        if self.instance:
+            if src is None:
+                src = self.instance.source_category
+            if dst is None:
+                dst = self.instance.destination_category
+
+        if src is not None and dst is not None and src == dst:
             raise serializers.ValidationError("Source and destination must be different.")
-        user = self.context["request"].user
-        if src.user_id != user.id or dst.user_id != user.id:
-            raise serializers.ValidationError("Both categories must belong to you.")
         return attrs
 
-    def create(self, validated: Dict[str, Any]) -> Transfer:
+    def create(self, validated):
         user = self.context["request"].user
-        src_cat: Category = validated["source_category"]
-        dst_cat: Category = validated["destination_category"]
+        src: Category = validated["source_category"]
+        dst: Category = validated["destination_category"]
         amount: Decimal = validated["amount"]
-        desc = validated.get("description")
+        date = validated["date"]
+        desc = validated.get("description") or ""  # avoid NULL in CharField
 
         with db_tx.atomic():
             transfer = Transfer.objects.create(
                 user=user,
-                source_category=src_cat,
-                destination_category=dst_cat,
+                source_category=src,
+                destination_category=dst,
                 amount=amount,
-                date=validated["date"],
+                date=date,
                 description=desc,
             )
-
-            # mirror as an EX (out) and IN (in) pair, linking back to the transfer
+            # mirror as EX (out) and IN (in)
             Transaction.objects.bulk_create(
                 [
                     Transaction(
                         user=user,
-                        category=src_cat,
+                        category=src,
                         amount=amount,
                         type="EX",
                         description=desc,
-                        date=transfer.date,
+                        date=date,
                         transfer=transfer,
                     ),
                     Transaction(
                         user=user,
-                        category=dst_cat,
+                        category=dst,
                         amount=amount,
                         type="IN",
                         description=desc,
-                        date=transfer.date,
+                        date=date,
                         transfer=transfer,
                     ),
                 ]
             )
         return transfer
+
+    def update(self, instance: Transfer, validated):
+        """
+        Keep the two mirrored transactions in sync with updates to the Transfer.
+        Also 'heal' the pair if one side is missing.
+        """
+        # normalize description (CharField is NOT NULL)
+        if "description" in validated and validated["description"] is None:
+            validated["description"] = ""
+
+        # apply incoming changes to the transfer
+        for field in ("source_category", "destination_category", "amount", "date", "description"):
+            if field in validated:
+                setattr(instance, field, validated[field])
+        instance.save()
+
+        user = instance.user
+        src = instance.source_category
+        dst = instance.destination_category
+        amt = instance.amount
+        date = instance.date
+        desc = instance.description or ""
+
+        with db_tx.atomic():
+            # load existing linked transactions
+            existing = {t.type: t for t in instance.transactions.all()}
+
+            # create missing sides if necessary
+            if "EX" not in existing:
+                existing["EX"] = Transaction.objects.create(
+                    user=user,
+                    category=src,
+                    amount=amt,
+                    type="EX",
+                    description=desc,
+                    date=date,
+                    transfer=instance,
+                )
+            if "IN" not in existing:
+                existing["IN"] = Transaction.objects.create(
+                    user=user,
+                    category=dst,
+                    amount=amt,
+                    type="IN",
+                    description=desc,
+                    date=date,
+                    transfer=instance,
+                )
+
+            # update common fields on both
+            Transaction.objects.filter(pk__in=[existing["EX"].pk, existing["IN"].pk]).update(
+                amount=amt, date=date, description=desc
+            )
+
+            # ensure categories are on the correct sides
+            if existing["EX"].category_id != src.id:
+                existing["EX"].category = src
+                existing["EX"].save(update_fields=["category"])
+            if existing["IN"].category_id != dst.id:
+                existing["IN"].category = dst
+                existing["IN"].save(update_fields=["category"])
+
+        return instance
 
     def to_representation(self, instance: Transfer):
         rep = super().to_representation(instance)
