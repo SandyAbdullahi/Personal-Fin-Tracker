@@ -163,23 +163,26 @@ class Budget(TimeStampedModel):
     def amount_spent(self) -> Decimal:
         """Monthly expenses for this user *and* category."""
         today = timezone.localdate()
-        return Transaction.objects.filter(
+        total = Transaction.objects.filter(
             user=self.user,
             category=self.category,
             type="EX",
             date__year=today.year,
             date__month=today.month,
-        ).aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
+            transfer__isnull=True,  # don’t count category-to-category transfers
+        ).aggregate(t=Sum("amount"))["t"]
+        return total or Decimal("0.00")
 
-    @amount_spent.setter  # allows BudgetFactory(spent=…)
-    def amount_spent(self, _):  # value ignored
+    @amount_spent.setter
+    def amount_spent(self, _):
+        # dummy setter so annotation assignment won’t explode
         pass
 
     @property
     def remaining(self) -> Decimal:
         return self.limit - self.amount_spent
 
-    @remaining.setter  # lets Django assign during annotation
+    @remaining.setter
     def remaining(self, _):
         pass
 
@@ -191,12 +194,12 @@ class Budget(TimeStampedModel):
     def percent_used(self, _):
         pass
 
-    # alias that factory_boy uses
+    # factory/test alias
     @property
     def spent(self) -> Decimal:
         return self.amount_spent
 
-    @spent.setter  # same dummy setter
+    @spent.setter
     def spent(self, _):
         pass
 

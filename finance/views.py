@@ -1,7 +1,7 @@
 # finance/views.py
 from decimal import Decimal
 
-from django.db.models import Case, DecimalField, ExpressionWrapper, F, FloatField, OuterRef, Subquery, Sum, Value, When
+from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, OuterRef, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -93,7 +93,7 @@ def summary(request):
         ?start=YYYY-MM-DD   – from date
         ?end=YYYY-MM-DD     – up to date
     """
-    qs = Transaction.objects.filter(user=request.user)
+    qs = Transaction.objects.filter(user=request.user, transfer__isnull=True)  # ← ignore transfers
 
     start = request.GET.get("start")
     end = request.GET.get("end")
@@ -106,7 +106,6 @@ def summary(request):
     expense_total = qs.filter(type="EX").aggregate(t=Sum("amount"))["t"] or 0
 
     by_category = qs.values(name=F("category__name")).annotate(total=Sum("amount")).order_by("-total")
-
     goal_data = [
         {
             "id": g.id,
@@ -158,6 +157,7 @@ class BudgetViewSet(viewsets.ModelViewSet):
                 user=OuterRef("user"),
                 category=OuterRef("category"),
                 type="EX",
+                transfer__isnull=True,  # ignore transfers in budgets
                 date__year=today.year,
                 date__month=today.month,
             )
@@ -166,7 +166,6 @@ class BudgetViewSet(viewsets.ModelViewSet):
             .values("total")[:1]
         )
 
-        # one reusable expression
         spent_expr = Coalesce(
             Subquery(
                 monthly_total,
@@ -176,17 +175,14 @@ class BudgetViewSet(viewsets.ModelViewSet):
         )
 
         return Budget.objects.filter(user=user).annotate(
-            spent=spent_expr,  # alias for ordering
+            amount_spent=spent_expr,  # ← add this
+            spent=spent_expr,  # ← keep alias for ordering=spent if used
             remaining=ExpressionWrapper(
                 F("limit") - spent_expr,
                 output_field=DecimalField(max_digits=10, decimal_places=2),
             ),
-            percent_used=Case(
-                When(limit=0, then=Value(0.0)),
-                default=ExpressionWrapper(
-                    spent_expr * Value(Decimal("100.00")) / F("limit"),
-                    output_field=FloatField(),
-                ),
+            percent_used=ExpressionWrapper(
+                spent_expr * Value(Decimal("100.00")) / F("limit"),
                 output_field=FloatField(),
             ),
         )

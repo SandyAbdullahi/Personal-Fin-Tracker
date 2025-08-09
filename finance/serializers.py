@@ -199,6 +199,17 @@ class BudgetSerializer(serializers.ModelSerializer):
         validated["user"] = req.user if req else self.context["request_user"]
         return super().create(validated)
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        # Fallback to model properties if annotations weren't present
+        if rep.get("amount_spent") is None:
+            rep["amount_spent"] = f"{instance.amount_spent:.2f}"
+        if rep.get("remaining") is None:
+            rep["remaining"] = f"{instance.remaining:.2f}"
+        if rep.get("percent_used") is None:
+            rep["percent_used"] = float(instance.percent_used)
+        return rep
+
 
 # ──────────────────────────────── 5. Debts & Payments ─────────────────────────
 
