@@ -350,7 +350,13 @@ class TransferSerializer(serializers.ModelSerializer):
             validated["description"] = ""
 
         # apply incoming changes to the transfer
-        for field in ("source_category", "destination_category", "amount", "date", "description"):
+        for field in (
+            "source_category",
+            "destination_category",
+            "amount",
+            "date",
+            "description",
+        ):
             if field in validated:
                 setattr(instance, field, validated[field])
         instance.save()

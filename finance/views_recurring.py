@@ -1,77 +1,67 @@
 # finance/views_recurring.py
-from datetime import date, datetime, time
+from __future__ import annotations
 
-from dateutil.rrule import rrulestr
-from rest_framework import permissions, viewsets
+from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from finance.models import RecurringTransaction, Transaction
-
+from .models import RecurringTransaction, Transaction
 from .permissions import IsOwnerOrReadOnly
 from .serializers import RecurringTransactionSerializer
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def post_due_recurring_transactions(request):
-    """
-    Create Transaction rows for every RecurringTransaction due today.
-    """
-
-    today = date.today()
-    count = 0
-
-    recurrings = (
-        RecurringTransaction.objects.filter(active=True, user=request.user, next_occurrence__lte=today)
-        .select_related("user", "category")
-        .order_by("next_occurrence")
-    )
-
-    for r in recurrings:
-        # keep looping while this item is still due *today*
-        while r.active and r.next_occurrence and r.next_occurrence <= today:
-
-            # 1️⃣ post the real Transaction
-            Transaction.objects.create(
-                user=r.user,
-                category=r.category,
-                amount=r.amount,
-                type=r.type,
-                description=r.description,
-                date=r.next_occurrence,
-            )
-            count += 1
-
-            # 2️⃣ work with DATETIME when talking to rrule
-            current_dt = datetime.combine(r.next_occurrence, time.min)
-            rule = rrulestr(r.rrule, dtstart=current_dt)
-
-            next_dt = rule.after(current_dt)  # - returns datetime
-            next_date = next_dt.date() if next_dt else None  # ☞ normalise
-
-            # 3️⃣ update or deactivate
-            if next_date is None or (r.end_date and next_date > r.end_date):
-                r.active = False
-            else:
-                r.next_occurrence = next_date
-
-            r.save(update_fields=["next_occurrence", "active"])
-
-    return Response({"posted": count, "date": str(today)})
-
-
 class RecurringTransactionViewSet(viewsets.ModelViewSet):
-    """
-    Standard CRUD operations for recurring items, user-scoped.
-    """
+    """CRUD for recurring items, scoped to the current user."""
 
     serializer_class = RecurringTransactionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
     def get_queryset(self):
         return RecurringTransaction.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def post_due_recurring_transactions(request):
+    from datetime import datetime
+
+    from dateutil.rrule import rrulestr
+    from django.utils import timezone
+
+    today = timezone.localdate()
+    posted = 0
+
+    due = RecurringTransaction.objects.filter(user=request.user, active=True, next_occurrence__lte=today)
+
+    for r in due:
+        Transaction.objects.create(
+            user=request.user,
+            category=r.category,
+            amount=r.amount,
+            type=r.type,
+            description=r.description,
+            date=r.next_occurrence,
+        )
+        posted += 1
+
+        # compute next occurrence safely (datetime vs date)
+        dtstart = datetime.combine(r.next_occurrence, datetime.min.time())
+        rule = rrulestr(r.rrule, dtstart=dtstart)
+        next_dt = rule.after(dtstart, inc=False)
+
+        if next_dt is None:
+            r.active = False
+        else:
+            nx = next_dt.date()
+            if r.end_date and nx > r.end_date:
+                r.active = False
+            else:
+                r.next_occurrence = nx
+
+        r.save(update_fields=["next_occurrence", "active"])
+
+    return Response({"posted": posted, "date": str(today)})
