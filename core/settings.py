@@ -158,7 +158,7 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "0.1.0",
     "DESCRIPTION": ("Public endpoints for categories, transactions, savings " "goals and recurring transactions."),
     "COMPONENT_SPLIT_REQUEST": True,
-    "SERVERS": [{"url": "/api"}],
+    "SERVERS": [{"url": "/"}],
     "TAGS": [{"name": "Transfers", "description": "Move funds between categories"}],
 }
 

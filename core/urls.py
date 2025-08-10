@@ -2,7 +2,9 @@
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from rest_framework_simplejwt.views import TokenRefreshView
 
+from accounts.auth_views import FlexibleTokenObtainPairView
 from core.views_health import health
 
 urlpatterns = [
@@ -25,4 +27,7 @@ urlpatterns = [
     path("api/auth/", include("accounts.urls")),
     path("api/finance/", include("finance.urls")),
     path("healthz/", health, name="health"),
+    # ✅ SimpleJWT
+    path("api/token/", FlexibleTokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 ]
