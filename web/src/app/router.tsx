@@ -1,14 +1,16 @@
-import { createBrowserRouter } from "react-router-dom";
-import { Layout } from "./layout";
-import Protected from "../auth/Protected";
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import ProtectedRoute from "../components/ProtectedRoute";
+import Layout from "./layout";
+
+import LoginPage from "../features/auth/LoginPage";
 import SummaryPage from "../features/summary/SummaryPage";
 import TransactionsPage from "../features/transactions/TransactionsPage";
-import LoginPage from "../features/auth/LoginPage";
 
-export const router = createBrowserRouter([
+const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
+
   {
-    element: <Protected />, // everything below requires auth
+    element: <ProtectedRoute />, // everything inside here requires auth
     children: [
       {
         path: "/",
@@ -20,4 +22,8 @@ export const router = createBrowserRouter([
       },
     ],
   },
+
+  { path: "*", element: <Navigate to="/" replace /> },
 ]);
+
+export default router;

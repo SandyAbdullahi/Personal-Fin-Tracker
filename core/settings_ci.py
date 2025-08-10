@@ -25,6 +25,20 @@ ALLOWED_HOSTS = [
     "personal-fin-tracker.onrender.com",
 ]
 
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    # If you use Next.js or another port in dev:
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    # plus any prod origins…
+]
 # Render preview/production URLs
 if host := os.getenv("RENDER_EXTERNAL_HOSTNAME"):
     ALLOWED_HOSTS.append(host)
