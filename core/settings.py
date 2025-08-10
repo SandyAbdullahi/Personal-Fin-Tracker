@@ -32,6 +32,14 @@ ALLOWED_HOSTS = [
     "personal-fin-tracker.onrender.com",
 ]
 
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    # If you use Next.js or another port in dev:
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 CSRF_TRUSTED_ORIGINS = ["https://*.onrender.com"]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
@@ -56,6 +64,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     # 3rd-party
     "rest_framework",
     "rest_framework_simplejwt",
@@ -73,6 +82,7 @@ AUTH_USER_MODEL = "accounts.CustomUser"
 # ────────────────────────────────────────────────────────────────────────────────
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
