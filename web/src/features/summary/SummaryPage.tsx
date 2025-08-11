@@ -61,7 +61,7 @@ export default function SummaryPage() {
           <h2 className="font-semibold mb-3">By Category</h2>
           <div className="overflow-x-auto border rounded">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-black-50">
                 <tr>
                   <th className="text-left px-3 py-2">Category</th>
                   <th className="text-right px-3 py-2">Total</th>
@@ -94,7 +94,7 @@ export default function SummaryPage() {
           <h2 className="font-semibold mb-3">Goals</h2>
           <div className="overflow-x-auto border rounded">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-black-50">
                 <tr>
                   <th className="text-left px-3 py-2">Name</th>
                   <th className="text-right px-3 py-2">Target</th>
