@@ -19,6 +19,7 @@ from typing import Any, Dict
 
 from dateutil.rrule import rrulestr
 from django.core.exceptions import FieldDoesNotExist
+from django.db import IntegrityError
 from django.db import transaction as db_tx
 from django.db.models import F
 from django.shortcuts import get_object_or_404
@@ -171,22 +172,13 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
 
 class BudgetSerializer(serializers.ModelSerializer):
     category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
-
     amount_spent = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     remaining = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     percent_used = serializers.FloatField(read_only=True)
 
     class Meta:
         model = Budget
-        fields = [
-            "id",
-            "category",
-            "limit",
-            "period",
-            "amount_spent",
-            "remaining",
-            "percent_used",
-        ]
+        fields = ["id", "category", "limit", "period", "amount_spent", "remaining", "percent_used"]
         read_only_fields = ["id", "amount_spent", "remaining", "percent_used"]
 
     def validate_limit(self, value):
@@ -194,21 +186,33 @@ class BudgetSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Limit must be positive.")
         return value
 
-    def create(self, validated):
-        req = self.context.get("request")
-        validated["user"] = req.user if req else self.context["request_user"]
-        return super().create(validated)
+    def validate(self, attrs):
+        """
+        Proactively enforce one budget per (user, category, period) so we return 400, not 500.
+        """
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        category = attrs.get("category")
+        period = attrs.get("period") or "M"
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        # Fallback to model properties if annotations weren't present
-        if rep.get("amount_spent") is None:
-            rep["amount_spent"] = f"{instance.amount_spent:.2f}"
-        if rep.get("remaining") is None:
-            rep["remaining"] = f"{instance.remaining:.2f}"
-        if rep.get("percent_used") is None:
-            rep["percent_used"] = float(instance.percent_used)
-        return rep
+        if user and category and Budget.objects.filter(user=user, category=category, period=period).exists():
+            raise serializers.ValidationError(
+                {"non_field_errors": ["A budget for this category and period already exists."]}
+            )
+        return attrs
+
+    def create(self, validated):
+        # attach user
+        req = self.context.get("request")
+        validated["user"] = req.user if req else self.context.get("request_user")
+
+        try:
+            return super().create(validated)
+        except IntegrityError:
+            # fallback if DB constraint still trips (race condition etc.)
+            raise serializers.ValidationError(
+                {"non_field_errors": ["A budget for this category and period already exists."]}
+            )
 
 
 # ──────────────────────────────── 5. Debts & Payments ─────────────────────────

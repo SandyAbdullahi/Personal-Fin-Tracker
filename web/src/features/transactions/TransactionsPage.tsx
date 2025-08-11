@@ -20,7 +20,7 @@ export default function TransactionsPage() {
       />
       <table className="w-full border">
         <thead>
-          <tr className="bg-gray-50 text-left">
+          <tr className="bg-black-50 text-left">
             <th className="p-2">Date</th>
             <th className="p-2">Category</th>
             <th className="p-2">Type</th>
