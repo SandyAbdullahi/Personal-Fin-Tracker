@@ -187,18 +187,22 @@ class BudgetSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        """
-        Proactively enforce one budget per (user, category, period) so we return 400, not 500.
-        """
-        request = self.context.get("request")
-        user = getattr(request, "user", None)
-        category = attrs.get("category")
-        period = attrs.get("period") or "M"
+        # Pull effective values (payload overrides instance)
+        category = attrs.get("category") or getattr(self.instance, "category", None)
+        period = attrs.get("period") or getattr(self.instance, "period", None)
 
-        if user and category and Budget.objects.filter(user=user, category=category, period=period).exists():
-            raise serializers.ValidationError(
-                {"non_field_errors": ["A budget for this category and period already exists."]}
-            )
+        # Resolve user from context (works for create & update)
+        req = self.context.get("request")
+        user = req.user if req and hasattr(req, "user") else self.context.get("request_user")
+
+        if user and category and period:
+            qs = Budget.objects.filter(user=user, category=category, period=period)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)  # ← exclude the row being edited
+            if qs.exists():
+                # keep it as non_field_errors (matches your current API)
+                raise serializers.ValidationError("A budget for this category and period already exists.")
+
         return attrs
 
     def create(self, validated):
