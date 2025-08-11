@@ -1,29 +1,70 @@
 // src/features/transactions/useTransactions.ts
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../../lib/auth/AuthContext";
 import { getJson } from "../../lib/api";
-import type { Paginated, Transaction } from "./api";
+import { useAuth } from "../../lib/auth/AuthContext";
 
-type Params = Record<string, string | number | boolean | undefined | null>;
+// Shape of a transaction row (adjust if you have extra fields)
+export type Transaction = {
+  id: number;
+  category_id: number;
+  amount: string; // DRF renders decimals as strings
+  type: "IN" | "EX";
+  description: string;
+  date: string; // YYYY-MM-DD
+  transfer?: number | null;
+};
 
-export function useTransactions(params?: Params) {
-  const { isAuthenticated } = useAuth();
+// Typical DRF paginated response
+export type Paginated<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};
 
-  // Always coerce to a plain object
-  const safeParams: Record<string, string> = Object.fromEntries(
-    Object.entries((params && typeof params === "object" ? params : {}) as Params)
-      .filter(([, v]) => v !== undefined && v !== null && v !== "")
-      .map(([k, v]) => [k, String(v)])
-  );
+// Allowed query params
+export type TxnParams = {
+  page?: number;
+  page_size?: number;
+  ordering?: string; // e.g. "-date" or "amount"
+  search?: string;
+  category?: number;
+  type?: "IN" | "EX";
+  date__gte?: string; // YYYY-MM-DD
+  date__lte?: string; // YYYY-MM-DD
+};
 
-  const qs = new URLSearchParams(safeParams).toString();
-  const url = `/api/finance/transactions/${qs ? `?${qs}` : ""}`;
+function buildQueryString(params?: TxnParams): string {
+  const p = params ?? {};
+  const qp = new URLSearchParams();
+  (Object.entries(p) as [keyof TxnParams, any][]).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") {
+      qp.set(String(k), String(v));
+    }
+  });
+  const qs = qp.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export function useTransactions(params?: TxnParams) {
+  const { userEmail } = useAuth();
+  const qs = buildQueryString(params);
 
   return useQuery<Paginated<Transaction>>({
-    queryKey: ["transactions", safeParams],
-    enabled: isAuthenticated,            // don’t fetch if not logged in
-    queryFn: () => getJson(url),
-    keepPreviousData: true,
-    staleTime: 30_000,
+    queryKey: ["transactions", userEmail, params ?? {}],
+    queryFn: async () =>
+      getJson<Paginated<Transaction>>(`/api/finance/transactions/${qs}`),
+    enabled: Boolean(userEmail), // don’t run until we know who the user is
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: (failureCount, error) => {
+      // Don’t hammer the server on auth errors
+      const msg = String(error ?? "");
+      if (msg.includes("401")) return false;
+      return failureCount < 2;
+    },
+    // Always return a predictable shape to callers
+    select: (data) =>
+      data ?? { count: 0, next: null, previous: null, results: [] },
   });
 }
