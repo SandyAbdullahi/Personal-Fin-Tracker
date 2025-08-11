@@ -1,29 +1,35 @@
+// src/app/router.tsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
-import ProtectedRoute from "../components/ProtectedRoute";
-import Layout from "./layout";
-
+import { ProtectedRoute } from "../components/ProtectedRoute";
+import Layout from "./Layout"; // note capital L (matches file name on case-sensitive systems)
 import LoginPage from "../features/auth/LoginPage";
 import SummaryPage from "../features/summary/SummaryPage";
 import TransactionsPage from "../features/transactions/TransactionsPage";
 
-const router = createBrowserRouter([
-  { path: "/login", element: <LoginPage /> },
-
+export const router = createBrowserRouter([
   {
-    element: <ProtectedRoute />, // everything inside here requires auth
+    element: <Layout />,
     children: [
       {
-        path: "/",
-        element: <Layout />,
-        children: [
-          { index: true, element: <SummaryPage /> },
-          { path: "transactions", element: <TransactionsPage /> },
-        ],
+        index: true,
+        element: (
+          <ProtectedRoute>
+            <SummaryPage />
+          </ProtectedRoute>
+        ),
       },
+      {
+        path: "transactions",
+        element: (
+          <ProtectedRoute>
+            <TransactionsPage />
+          </ProtectedRoute>
+        ),
+      },
+      { path: "login", element: <LoginPage /> },
+      { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
-
-  { path: "*", element: <Navigate to="/" replace /> },
 ]);
 
-export default router;
+export default router; // 👈 add this

@@ -1,75 +1,88 @@
-import React, { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+// src/features/auth/LoginPage.tsx
+import { FormEvent, useState } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../lib/auth/AuthContext";
+import { apiFetch } from "../../lib/api";
 
 export default function LoginPage() {
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // where to go after login (default "/")
   const from = (location.state as any)?.from?.pathname || "/";
-  const { login } = useAuth();
 
-  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  // If we’re already logged in (or just became logged in), bounce out.
+  if (isAuthenticated) {
+    return <Navigate to={from} replace />;
+  }
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setErr(null);
-    setLoading(true);
+    setSubmitting(true);
+    setError(null);
+
     try {
-      const usernameField =
-        import.meta.env.VITE_JWT_USERNAME_FIELD?.trim() || "email";
-
-      const res = await fetch(`${API_BASE}/api/token/`, {
+         const resp = await apiFetch("/api/token/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // credentials: "include",
-        body: JSON.stringify({ [usernameField]: identifier, password }),
-      });
+        body: JSON.stringify({ email, password }),
+        });
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || "Invalid credentials");
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data?.detail || "Invalid credentials");
       }
 
-      const { access, refresh } = await res.json();
-      await login(access, refresh);           // ensure context updates
-      navigate(from, { replace: true });      // then redirect
-    } catch (e: any) {
-      setErr(e.message || "Login failed");
+      const tokens = (await resp.json()) as { access: string; refresh: string };
+      login(tokens, email);
+
+      // navigate explicitly (the <Navigate /> above is a safety net)
+      navigate(from, { replace: true });
+    } catch (err: any) {
+      setError(err.message || "Login failed");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-sm p-6">
-      <h1 className="text-2xl font-semibold mb-4">Sign in</h1>
+    <div className="max-w-md mx-auto mt-16 p-6 border rounded">
+      <h1 className="text-xl mb-4">Sign in</h1>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <input
-          className="w-full border rounded px-3 py-2"
-          placeholder="Email"
-          value={identifier}
-          onChange={(e) => setIdentifier(e.target.value)}
-          autoComplete="username"
-        />
-        <input
-          className="w-full border rounded px-3 py-2"
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-        />
-        {err && <p className="text-red-600 text-sm">{err}</p>}
+        <div>
+          <label className="block text-sm mb-1">Email</label>
+          <input
+            type="email"
+            className="w-full border rounded px-3 py-2"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm mb-1">Password</label>
+          <input
+            type="password"
+            className="w-full border rounded px-3 py-2"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </div>
+        {error && <p className="text-red-600 text-sm">{error}</p>}
         <button
-          className="w-full rounded bg-black text-white py-2 disabled:opacity-60"
-          disabled={loading}
+          type="submit"
+          className="w-full px-3 py-2 rounded bg-black text-white disabled:opacity-50"
+          disabled={submitting}
         >
-          {loading ? "Signing in…" : "Sign in"}
+          {submitting ? "Signing in…" : "Sign in"}
         </button>
       </form>
     </div>

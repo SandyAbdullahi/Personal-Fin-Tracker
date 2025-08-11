@@ -1,14 +1,19 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { ReactNode } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "../lib/auth/AuthContext";
 
-export default function ProtectedRoute() {
-  const { initializing, isAuthenticated } = useAuth();
+type Props = { children: ReactNode };
+
+export const ProtectedRoute = ({ children }: Props) => {
+  const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
 
-  if (initializing) return null; // or a loading spinner
+  if (loading) return null; // or a tiny spinner
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
-  return <Outlet />;
-}
+  return <>{children}</>;
+};
+
+export default ProtectedRoute;

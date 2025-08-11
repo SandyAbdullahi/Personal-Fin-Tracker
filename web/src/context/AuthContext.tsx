@@ -1,79 +1,68 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-type AuthContextType = {
-  initializing: boolean;
-  isAuthenticated: boolean;
+type AuthState = {
   accessToken: string | null;
-  user: any | null;
-  login: (access: string, refresh: string) => Promise<void>;
+  refreshToken: string | null;
+  userEmail: string | null;
+};
+
+type AuthContextValue = AuthState & {
+  isAuthenticated: boolean;
+  loading: boolean;
+  login: (tokens: { access: string; refresh: string }, email: string) => void;
   logout: () => void;
 };
 
-const AuthContext = createContext<AuthContextType>({
-  initializing: true,
-  isAuthenticated: false,
-  accessToken: null,
-  user: null,
-  login: async () => {},
-  logout: () => {},
-});
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export const useAuth = () => useContext(AuthContext);
-
-function parseJwt(token: string) {
-  try {
-    const [, payload] = token.split(".");
-    return JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-  } catch {
-    return null;
-  }
-}
-
-export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const [initializing, setInitializing] = useState(true);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
-  const [user, setUser] = useState<any | null>(null);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<AuthState>({
+    accessToken: null,
+    refreshToken: null,
+    userEmail: null,
+  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const a = localStorage.getItem("access");
-    const r = localStorage.getItem("refresh");
-    if (a && r) {
-      setAccessToken(a);
-      setRefreshToken(r);
-      setUser(parseJwt(a));
+    const accessToken = localStorage.getItem("accessToken");
+    const refreshToken = localStorage.getItem("refreshToken");
+    const userEmail = localStorage.getItem("userEmail");
+    if (accessToken && refreshToken) {
+      setState({ accessToken, refreshToken, userEmail });
     }
-    setInitializing(false);
+    setLoading(false);
   }, []);
 
-  const login = async (access: string, refresh: string) => {
-    setAccessToken(access);
-    setRefreshToken(refresh);
-    localStorage.setItem("access", access);
-    localStorage.setItem("refresh", refresh);
-    setUser(parseJwt(access));
-  };
-
-  const logout = () => {
-    setAccessToken(null);
-    setRefreshToken(null);
-    setUser(null);
-    localStorage.removeItem("access");
-    localStorage.removeItem("refresh");
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{
-        initializing,
-        isAuthenticated: !!accessToken,
-        accessToken,
-        user,
-        login,
-        logout,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      ...state,
+      loading,
+      isAuthenticated: Boolean(state.accessToken),
+      login: (tokens, email) => {
+        localStorage.setItem("accessToken", tokens.access);
+        localStorage.setItem("refreshToken", tokens.refresh);
+        localStorage.setItem("userEmail", email);
+        setState({
+          accessToken: tokens.access,
+          refreshToken: tokens.refresh,
+          userEmail: email,
+        });
+      },
+      logout: () => {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("userEmail");
+        setState({ accessToken: null, refreshToken: null, userEmail: null });
+      },
+    }),
+    [state, loading]
   );
-};
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  return ctx;
+}

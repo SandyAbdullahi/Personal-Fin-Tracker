@@ -34,6 +34,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
 ]
 
+CORS_ALLOW_CREDENTIALS = True  # required if you keep credentials: "include"
+
+
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -52,6 +55,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     # 3ʳᵈ-party
     "rest_framework",
     "rest_framework_simplejwt",
@@ -63,6 +67,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",  # put near the top
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",  # ← must follow Security
     "django.contrib.sessions.middleware.SessionMiddleware",
