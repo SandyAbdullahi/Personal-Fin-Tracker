@@ -19,7 +19,6 @@ from typing import Any, Dict
 
 from dateutil.rrule import rrulestr
 from django.core.exceptions import FieldDoesNotExist
-from django.db import IntegrityError
 from django.db import transaction as db_tx
 from django.db.models import F
 from django.shortcuts import get_object_or_404
@@ -53,9 +52,25 @@ class TransactionSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ["id", "transfer"]
 
-    # field-level validation
-    def _resolve_category(self, value: int) -> Category:
-        return get_object_or_404(Category, pk=value)
+    # ───────── helpers ───────── #
+    def _current_user(self):
+        req = self.context.get("request")
+        return getattr(req, "user", None) if req else None
+
+    def _resolve_category(self, value):
+        """
+        Resolve by PK without raising Http404. If a user is present in context,
+        ensure the category belongs to them; otherwise raise ValidationError.
+        """
+        # allow instance or integer
+        cat = value if isinstance(value, Category) else Category.objects.filter(pk=value).first()
+        if not cat:
+            raise serializers.ValidationError("Invalid category.")
+
+        user = self._current_user()
+        if user and cat.user_id != user.id:
+            raise serializers.ValidationError("Invalid category.")
+        return cat
 
     def validate_category_id(self, value):
         return self._resolve_category(value)
@@ -83,6 +98,9 @@ class TransactionSerializer(serializers.ModelSerializer):
         rep["category_id"] = instance.category_id
         rep.pop("category", None)
         return rep
+
+
+# ──────────────────────────────── Category ────────────────────────────
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -133,8 +151,13 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "active"]
 
-    def _resolve_category(self, value):
-        return get_object_or_404(Category, pk=value)
+    def _current_user(self):
+        req = self.context.get("request")
+        return getattr(req, "user", None) if req else None
+
+    def _resolve_category(self, value: int) -> Category:
+        user = self._current_user()
+        return get_object_or_404(Category, pk=value, user=user)
 
     def validate_category_id(self, value):
         return self._resolve_category(value)
@@ -171,52 +194,69 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
 
 
 class BudgetSerializer(serializers.ModelSerializer):
-    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
-    amount_spent = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    remaining = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    percent_used = serializers.FloatField(read_only=True)
+    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.none())
 
     class Meta:
         model = Budget
-        fields = ["id", "category", "limit", "period", "amount_spent", "remaining", "percent_used"]
+        fields = [
+            "id",
+            "category",
+            "limit",
+            "period",
+            "amount_spent",
+            "remaining",
+            "percent_used",
+        ]
         read_only_fields = ["id", "amount_spent", "remaining", "percent_used"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # figure out the user from context (views/tests both supported)
+        req = self.context.get("request")
+        user = req.user if req and getattr(req, "user", None) else self.context.get("request_user")
+        self.fields["category"].queryset = Category.objects.filter(user=user) if user else Category.objects.none()
+
+    def validate_category(self, value):
+        req = self.context.get("request")
+        user = req.user if req and getattr(req, "user", None) else self.context.get("request_user")
+        if not user or value.user_id != getattr(user, "id", None):
+            raise serializers.ValidationError("Category does not belong to the authenticated user.")
+        return value
 
     def validate_limit(self, value):
         if value <= 0:
             raise serializers.ValidationError("Limit must be positive.")
         return value
 
-    def validate(self, attrs):
-        # Pull effective values (payload overrides instance)
-        category = attrs.get("category") or getattr(self.instance, "category", None)
-        period = attrs.get("period") or getattr(self.instance, "period", None)
-
-        # Resolve user from context (works for create & update)
-        req = self.context.get("request")
-        user = req.user if req and hasattr(req, "user") else self.context.get("request_user")
-
-        if user and category and period:
-            qs = Budget.objects.filter(user=user, category=category, period=period)
-            if self.instance:
-                qs = qs.exclude(pk=self.instance.pk)  # ← exclude the row being edited
-            if qs.exists():
-                # keep it as non_field_errors (matches your current API)
-                raise serializers.ValidationError("A budget for this category and period already exists.")
-
-        return attrs
-
     def create(self, validated):
-        # attach user
         req = self.context.get("request")
-        validated["user"] = req.user if req else self.context.get("request_user")
+        validated["user"] = req.user if req else self.context["request_user"]
+        return super().create(validated)
 
-        try:
-            return super().create(validated)
-        except IntegrityError:
-            # fallback if DB constraint still trips (race condition etc.)
-            raise serializers.ValidationError(
-                {"non_field_errors": ["A budget for this category and period already exists."]}
-            )
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+
+        def fmt(value) -> str:
+            d = Decimal(value or "0")
+            return f"{d.quantize(Decimal('0.00'))}"
+
+        # amount_spent can come from annotation `spent` or the property
+        spent_val = getattr(instance, "spent", None)
+        if spent_val is None:
+            spent_val = getattr(instance, "amount_spent", None)
+        rep["amount_spent"] = fmt(spent_val)
+
+        # remaining may be annotated or computed property
+        remaining_val = getattr(instance, "remaining", None)
+        if remaining_val is None:
+            # fallback compute if needed
+            amt = getattr(instance, "amount_spent", None)
+            if amt is None:
+                amt = spent_val
+            remaining_val = Decimal(instance.limit) - Decimal(amt or 0)
+        rep["remaining"] = fmt(remaining_val)
+
+        return rep
 
 
 # ──────────────────────────────── 5. Debts & Payments ─────────────────────────
@@ -281,8 +321,11 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class TransferSerializer(serializers.ModelSerializer):
-    source_category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
-    destination_category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
+    # Restrict both sides to the current user's categories
+    source_category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.none())
+    destination_category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.none())
+    # make description optional and allow blank strings (model has blank=True)
+    description = serializers.CharField(allow_blank=True, required=False)
 
     class Meta:
         model = Transfer
@@ -296,50 +339,54 @@ class TransferSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id"]
 
-    # amount-level validation (attaches error to "amount")
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        req = self.context.get("request")
+        user = getattr(req, "user", None) if req else None
+        qs = Category.objects.filter(user=user) if user else Category.objects.none()
+        self.fields["source_category"].queryset = qs
+        self.fields["destination_category"].queryset = qs
+
     def validate_amount(self, value: Decimal) -> Decimal:
         if value <= 0:
             raise serializers.ValidationError("Amount must be positive.")
         return value
 
-    # cross-field validation — works for partial updates, too
     def validate(self, attrs):
-        src = attrs.get("source_category")
-        dst = attrs.get("destination_category")
-
-        if self.instance:
-            if src is None:
-                src = self.instance.source_category
-            if dst is None:
-                dst = self.instance.destination_category
-
-        if src is not None and dst is not None and src == dst:
+        """
+        Support PATCH: if a side isn't in attrs, pull it from the instance.
+        Only error if both are known and equal.
+        """
+        instance = getattr(self, "instance", None)
+        src = attrs.get("source_category") or (instance.source_category if instance else None)
+        dst = attrs.get("destination_category") or (instance.destination_category if instance else None)
+        if src and dst and src == dst:
             raise serializers.ValidationError("Source and destination must be different.")
         return attrs
 
-    def create(self, validated):
+    def create(self, validated: Dict[str, Any]) -> Transfer:
         user = self.context["request"].user
-        src: Category = validated["source_category"]
-        dst: Category = validated["destination_category"]
+        src_cat: Category = validated["source_category"]
+        dst_cat: Category = validated["destination_category"]
         amount: Decimal = validated["amount"]
         date = validated["date"]
-        desc = validated.get("description") or ""  # avoid NULL in CharField
+        desc = validated.get("description", "")
 
         with db_tx.atomic():
             transfer = Transfer.objects.create(
                 user=user,
-                source_category=src,
-                destination_category=dst,
+                source_category=src_cat,
+                destination_category=dst_cat,
                 amount=amount,
                 date=date,
                 description=desc,
             )
-            # mirror as EX (out) and IN (in)
+            # Create mirror pair
             Transaction.objects.bulk_create(
                 [
                     Transaction(
                         user=user,
-                        category=src,
+                        category=src_cat,
                         amount=amount,
                         type="EX",
                         description=desc,
@@ -348,7 +395,7 @@ class TransferSerializer(serializers.ModelSerializer):
                     ),
                     Transaction(
                         user=user,
-                        category=dst,
+                        category=dst_cat,
                         amount=amount,
                         type="IN",
                         description=desc,
@@ -359,72 +406,57 @@ class TransferSerializer(serializers.ModelSerializer):
             )
         return transfer
 
-    def update(self, instance: Transfer, validated):
+    def update(self, instance: Transfer, validated: Dict[str, Any]) -> Transfer:
         """
-        Keep the two mirrored transactions in sync with updates to the Transfer.
-        Also 'heal' the pair if one side is missing.
+        Sync the two linked transactions on any change.
+        Heal if one is missing; prune extras if somehow present.
         """
-        # normalize description (CharField is NOT NULL)
-        if "description" in validated and validated["description"] is None:
-            validated["description"] = ""
-
-        # apply incoming changes to the transfer
-        for field in (
-            "source_category",
-            "destination_category",
-            "amount",
-            "date",
-            "description",
-        ):
-            if field in validated:
-                setattr(instance, field, validated[field])
-        instance.save()
-
-        user = instance.user
-        src = instance.source_category
-        dst = instance.destination_category
-        amt = instance.amount
-        date = instance.date
-        desc = instance.description or ""
+        # Resolve new values, defaulting to existing instance values
+        src = validated.get("source_category", instance.source_category)
+        dst = validated.get("destination_category", instance.destination_category)
+        amount = validated.get("amount", instance.amount)
+        date = validated.get("date", instance.date)
+        desc = validated.get("description", instance.description)
 
         with db_tx.atomic():
-            # load existing linked transactions
-            existing = {t.type: t for t in instance.transactions.all()}
+            # Update the transfer row itself
+            instance.source_category = src
+            instance.destination_category = dst
+            instance.amount = amount
+            instance.date = date
+            instance.description = desc
+            instance.save()
 
-            # create missing sides if necessary
-            if "EX" not in existing:
-                existing["EX"] = Transaction.objects.create(
-                    user=user,
-                    category=src,
-                    amount=amt,
-                    type="EX",
+            # Fetch existing linked transactions
+            txs = list(instance.transactions.all())
+
+            def upsert(kind: str, category: Category) -> Transaction:
+                # Try to find an existing tx of the given kind
+                for tx in txs:
+                    if tx.type == kind:
+                        tx.category = category
+                        tx.amount = amount
+                        tx.date = date
+                        tx.description = desc
+                        tx.user = instance.user
+                        tx.save()
+                        return tx
+                # Missing -> create it
+                return Transaction.objects.create(
+                    user=instance.user,
+                    category=category,
+                    amount=amount,
+                    type=kind,
                     description=desc,
                     date=date,
                     transfer=instance,
                 )
-            if "IN" not in existing:
-                existing["IN"] = Transaction.objects.create(
-                    user=user,
-                    category=dst,
-                    amount=amt,
-                    type="IN",
-                    description=desc,
-                    date=date,
-                    transfer=instance,
-                )
 
-            # update common fields on both
-            Transaction.objects.filter(pk__in=[existing["EX"].pk, existing["IN"].pk]).update(
-                amount=amt, date=date, description=desc
-            )
+            tx_out = upsert("EX", src)
+            tx_in = upsert("IN", dst)
 
-            # ensure categories are on the correct sides
-            if existing["EX"].category_id != src.id:
-                existing["EX"].category = src
-                existing["EX"].save(update_fields=["category"])
-            if existing["IN"].category_id != dst.id:
-                existing["IN"].category = dst
-                existing["IN"].save(update_fields=["category"])
+            # If any extra/stray transactions are linked, remove them
+            instance.transactions.exclude(pk__in=[tx_out.pk, tx_in.pk]).delete()
 
         return instance
 

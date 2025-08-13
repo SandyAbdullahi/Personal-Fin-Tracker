@@ -7,13 +7,44 @@ from decimal import Decimal
 from dateutil.rrule import rrulestr
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
-from django.db.models import Sum, UniqueConstraint
+from django.db import models, transaction
+from django.db.models import Max, Sum, UniqueConstraint
 from django.utils import timezone
 from django_extensions.db.models import TimeStampedModel
 
 
-# ─────────────────────────────── Categories ────────────────────────────────
+# ─────────────────────────── Per-user sequence mixin ───────────────────────────
+class PerUserSequenceMixin(models.Model):
+    """
+    Adds a per-user auto-incrementing `local_id` that starts at 1 for each user.
+    Assumes the model has a FK named `user`.
+    """
+
+    local_id = models.PositiveIntegerField(editable=False, null=True)
+
+    class Meta:
+        abstract = True
+
+    def _next_local_id(self) -> int:
+        agg = self.__class__.objects.filter(user=self.user).aggregate(m=Max("local_id"))
+        return (agg["m"] or 0) + 1
+
+    def save(self, *args, **kwargs):
+        # Assign only on create
+        if self._state.adding and self.local_id is None:
+            # Tiny retry loop to handle a rare race condition
+            for _ in range(3):
+                try:
+                    with transaction.atomic():
+                        self.local_id = self._next_local_id()
+                        return super().save(*args, **kwargs)
+                except Exception:
+                    # another concurrent insert likely grabbed the same number
+                    self.local_id = None
+        return super().save(*args, **kwargs)
+
+
+# ───────────────────────────────── Categories ─────────────────────────────────
 class Category(TimeStampedModel):
     name = models.CharField(max_length=64)
     user = models.ForeignKey(
@@ -31,8 +62,8 @@ class Category(TimeStampedModel):
         return self.name
 
 
-# ─────────────────────────────── Transactions ──────────────────────────────
-class Transaction(TimeStampedModel):
+# ──────────────────────────────── Transactions ────────────────────────────────
+class Transaction(PerUserSequenceMixin, TimeStampedModel):
     class Type(models.TextChoices):
         INCOME = "IN", "Income"
         EXPENSE = "EX", "Expense"
@@ -60,6 +91,11 @@ class Transaction(TimeStampedModel):
         blank=True,
     )
 
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["user", "local_id"], name="uniq_tx_user_local_id"),
+        ]
+
     def __str__(self) -> str:  # pragma: no cover
         desc = f"{self.description} " if self.description else ""
         sign = "+" if self.type == self.Type.INCOME else "-"
@@ -67,7 +103,7 @@ class Transaction(TimeStampedModel):
         return f"{desc}{value} {self.category}"
 
 
-# ───────────────────────────── Savings Goals ───────────────────────────────
+# ───────────────────────────────── Savings Goals ──────────────────────────────
 class SavingsGoal(TimeStampedModel):
     name = models.CharField(max_length=64)
     target_amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -90,7 +126,7 @@ class SavingsGoal(TimeStampedModel):
         return f"{self.name} ({self.current_amount}/{self.target_amount})"
 
 
-# ─────────────────────── Recurring Transactions ────────────────────────────
+# ───────────────────────────── Recurring Transactions ─────────────────────────
 class RecurringTransaction(models.Model):
     """
     Blueprint for posting future `Transaction`s automatically.
@@ -120,7 +156,6 @@ class RecurringTransaction(models.Model):
         unique_together = ("user", "description", "rrule")
         ordering = ("next_occurrence",)
 
-    # validation
     def clean(self):
         super().clean()
         try:
@@ -132,15 +167,15 @@ class RecurringTransaction(models.Model):
             raise ValidationError({"next_occurrence": "Date cannot be in the past."})
 
     def __str__(self) -> str:  # pragma: no cover
-        return f"{self.user} → {self.amount} " f"{self.get_type_display()} @ {self.rrule}"
+        return f"{self.user} → {self.amount} {self.get_type_display()} @ {self.rrule}"
 
 
-# ───────────────────────────────── Budgets ──────────────────────────────────
-class Budget(TimeStampedModel):
+# ─────────────────────────────────── Budgets ──────────────────────────────────
+class Budget(PerUserSequenceMixin, TimeStampedModel):
     """
     A spending envelope for a single category & period.
-    List views annotate the query-set, but detail views (and factory_boy)
-    rely on these fallback properties.
+    List views annotate the queryset; these properties act as a fallback
+    for detail views and factories.
     """
 
     PERIODS = [("M", "Monthly"), ("Y", "Yearly")]
@@ -151,31 +186,30 @@ class Budget(TimeStampedModel):
     period = models.CharField(max_length=1, choices=PERIODS, default="M")
 
     class Meta:
-        constraints = [UniqueConstraint(fields=["user", "category", "period"], name="unique_budget_per_period")]
+        constraints = [
+            UniqueConstraint(fields=["user", "category", "period"], name="unique_budget_per_period"),
+            UniqueConstraint(fields=["user", "local_id"], name="uniq_budget_user_local_id"),
+        ]
         ordering = ("-created",)
 
-    # ───────────────────────── display ───────────────────────── #
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.category} – {self.limit} ({self.get_period_display()})"
 
-    # ─────────────────── computed helpers ────────────────────── #
+    # Fallback computed helpers (detail view / admin / tests)
     @property
     def amount_spent(self) -> Decimal:
         """Monthly expenses for this user *and* category."""
         today = timezone.localdate()
-        total = Transaction.objects.filter(
+        return Transaction.objects.filter(
             user=self.user,
             category=self.category,
             type="EX",
             date__year=today.year,
             date__month=today.month,
-            transfer__isnull=True,  # don’t count category-to-category transfers
-        ).aggregate(t=Sum("amount"))["t"]
-        return total or Decimal("0.00")
+        ).aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
 
     @amount_spent.setter
-    def amount_spent(self, _):
-        # dummy setter so annotation assignment won’t explode
+    def amount_spent(self, _):  # allow assignment during annotation/factory use
         pass
 
     @property
@@ -194,7 +228,7 @@ class Budget(TimeStampedModel):
     def percent_used(self, _):
         pass
 
-    # factory/test alias
+    # alias some factories expect
     @property
     def spent(self) -> Decimal:
         return self.amount_spent
@@ -203,8 +237,13 @@ class Budget(TimeStampedModel):
     def spent(self, _):
         pass
 
+    def clean(self):
+        super().clean()
+        if self.category_id and self.user_id and self.category.user_id != self.user_id:
+            raise ValidationError({"category": "Category does not belong to this user."})
 
-# ───────────────────────────────── Debts and Payments ──────────────────────────────────
+
+# ───────────────────────────────── Debts & Payments ───────────────────────────
 class Debt(TimeStampedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="debts")
     name = models.CharField(max_length=64)
@@ -231,8 +270,8 @@ class Payment(TimeStampedModel):
     memo = models.CharField(max_length=128, blank=True)
 
 
-# ─────────────────────────────── Transfers ────────────────────────────────
-class Transfer(TimeStampedModel):
+# ─────────────────────────────────── Transfers ────────────────────────────────
+class Transfer(PerUserSequenceMixin, TimeStampedModel):
     """
     Move money between two categories by creating a paired Transaction:
       • source  → Expense (EX)   –amount
@@ -247,6 +286,9 @@ class Transfer(TimeStampedModel):
     description = models.CharField(max_length=255, blank=True)
 
     class Meta:
+        constraints = [
+            UniqueConstraint(fields=["user", "local_id"], name="uniq_transfer_user_local_id"),
+        ]
         ordering = ("-date", "-id")
 
     def clean(self):

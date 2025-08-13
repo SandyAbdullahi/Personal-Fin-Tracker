@@ -1,64 +1,40 @@
-// src/features/budgets/api.ts
-import { apiFetch, getJson, postJson } from "../../lib/api";
+import { getJson, postJson, apiFetch } from "../../lib/api";
 
 export type Budget = {
   id: number;
   category: number;
-  limit: string;         // Django returns Decimal as string
+  limit: string;
   period: "M" | "Y";
-  amount_spent: string;  // "123.45"
-  remaining: string;     // "876.55"
-  percent_used: number;  // e.g. 12.3
+  amount_spent?: string;
+  remaining?: string;
+  percent_used?: number;
 };
 
-export type BudgetList = {
-  results: Budget[];
-  count: number;
-  next: string | null;
-  previous: string | null;
-};
-
-export type CreateBudgetPayload = {
-  category: number;
-  limit: string | number;
-  period: "M" | "Y";
-};
-
-export type UpdateBudgetPayload = Partial<CreateBudgetPayload>;
-
-export async function listBudgets(params?: Record<string, string | number>) {
-  const qs = params
-    ? "?" +
-      new URLSearchParams(
-        Object.entries(params).map(([k, v]) => [k, String(v)])
-      ).toString()
-    : "";
-  return getJson<BudgetList>(`/api/finance/budgets/${qs}`);
+export async function listBudgets(): Promise<Budget[]> {
+  const raw = await getJson<any>("/api/finance/budgets/");
+  return Array.isArray(raw) ? raw : raw?.results ?? [];
 }
 
-export async function createBudget(payload: CreateBudgetPayload) {
-  return postJson<Budget>("/api/finance/budgets/", payload);
+export async function createBudget(body: { category: number; limit: string; period: "M" | "Y" }): Promise<Budget> {
+  return postJson<Budget>("/api/finance/budgets/", body);
 }
 
-export async function updateBudget(id: number, payload: UpdateBudgetPayload) {
+export async function deleteBudget(id: number): Promise<void> {
+  const res = await apiFetch(`/api/finance/budgets/${id}/`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+}
+
+export async function updateBudget(
+  id: number,
+  body: { category: number; limit: string; period: "M" | "Y" }
+): Promise<Budget> {
   const res = await apiFetch(`/api/finance/budgets/${id}/`, {
     method: "PATCH",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`PATCH /budgets/${id} failed: ${res.status} ${txt}`);
+    throw new Error(txt || `Update failed: ${res.status}`);
   }
-  return res.json() as Promise<Budget>;
-}
-
-export async function deleteBudget(id: number) {
-  const res = await apiFetch(`/api/finance/budgets/${id}/`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`DELETE /budgets/${id} failed: ${res.status} ${txt}`);
-  }
-  return true;
+  return res.json();
 }

@@ -1,45 +1,58 @@
-import { useState } from "react";
-import { useTransactions } from "./useTransactions";
+// src/features/transactions/TransactionsPage.tsx
+import { useMemo, useState } from "react";
+import { useTransactions } from "./api";
+import AddTransactionForm from "./AddTransactionForm";
 
 export default function TransactionsPage() {
   const [search, setSearch] = useState("");
-  const { data, isLoading } = useTransactions(
-    search ? { search } : undefined as any
-  );
-
-  if (isLoading) return <p>Loading…</p>;
+  const params = useMemo(() => (search ? { search } : undefined), [search]);
+  const { data, isLoading, isError, error } = useTransactions(params);
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Transactions</h1>
-      <input
-        className="border px-3 py-2 rounded w-full max-w-md"
-        placeholder="Search description…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      <table className="w-full border">
-        <thead>
-          <tr className="bg-black-50 text-left">
-            <th className="p-2">Date</th>
-            <th className="p-2">Category</th>
-            <th className="p-2">Type</th>
-            <th className="p-2">Amount</th>
-            <th className="p-2">Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.results?.map((t: any) => (
-            <tr key={t.id} className="border-t">
-              <td className="p-2">{t.date}</td>
-              <td className="p-2">{t.category_id}</td>
-              <td className="p-2">{t.type}</td>
-              <td className="p-2">{t.amount}</td>
-              <td className="p-2">{t.description}</td>
+    <div>
+      <h1 className="text-xl font-bold mb-4">Transactions</h1>
+
+      {/* New: quick-create form */}
+      <AddTransactionForm onCreated={() => {/* no-op; list auto refreshes via invalidate */}} />
+
+      <div className="mb-3">
+        <input
+          className="border rounded px-2 py-1"
+          placeholder="Search description…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      {isLoading && <div>Loading…</div>}
+      {isError && <div className="text-red-600">{(error as Error)?.message}</div>}
+
+      {data && (
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left p-2">ID</th>
+              <th className="text-left p-2">Category ID</th>
+              <th className="text-left p-2">Type</th>
+              <th className="text-left p-2">Amount</th>
+              <th className="text-left p-2">Date</th>
+              <th className="text-left p-2">Description</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.results.map((t) => (
+              <tr key={t.id} className="border-b">
+                <td className="p-2">{t.id}</td>
+                <td className="p-2">{t.category_id}</td>
+                <td className="p-2">{t.type}</td>
+                <td className="p-2">{t.amount}</td>
+                <td className="p-2">{t.date}</td>
+                <td className="p-2">{t.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

@@ -1,17 +1,12 @@
 // src/features/categories/api.ts
-import { useQuery } from "@tanstack/react-query";
 import { getJson } from "../../lib/api";
 
 export type Category = { id: number; name: string };
 
-export async function fetchCategories(): Promise<{ results: Category[] }> {
-  // Your categories endpoint is paginated via DRF, so return {results:[]}
-  return getJson<{ results: Category[] }>("/api/finance/categories/");
-}
-
-export function useCategories() {
-  return useQuery({
-    queryKey: ["categories"],
-    queryFn: fetchCategories,
-  });
+// Return a flat array whether the API is paginated or not.
+export async function fetchCategories(): Promise<Category[]> {
+  const data = await getJson<any>("/api/finance/categories/");
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
 }
