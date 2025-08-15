@@ -99,6 +99,26 @@ class TransactionSerializer(serializers.ModelSerializer):
         rep.pop("category", None)
         return rep
 
+    def update(self, instance, validated_data):
+        # Support either alias from the PATCH payload
+        cat_obj = validated_data.pop("category", None) or validated_data.pop("category_id", None)
+        if cat_obj is not None:
+            # Accept Category instance *or* raw id
+            instance.category_id = cat_obj.pk if hasattr(cat_obj, "pk") else cat_obj
+
+        # Update the rest, if present
+        for field in ("amount", "type", "description", "date"):
+            if field in validated_data:
+                setattr(instance, field, validated_data[field])
+
+        # (Optional) re-stamp user if request exists
+        request = self.context.get("request")
+        if request and getattr(request.user, "is_authenticated", False):
+            instance.user = request.user
+
+        instance.save()
+        return instance
+
 
 # ──────────────────────────────── Category ────────────────────────────
 
@@ -107,6 +127,22 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["id", "name"]
+
+    def validate_name(self, value: str):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("This field may not be blank.")
+
+        # Enforce per-user uniqueness (case-insensitive)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user and user.is_authenticated:
+            qs = Category.objects.filter(user=user, name__iexact=value)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError("You already have a category with this name.")
+        return value
 
 
 # ──────────────────────────────── 2. Savings Goals ────────────────────────────

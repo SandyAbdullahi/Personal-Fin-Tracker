@@ -9,7 +9,9 @@ export default function Layout() {
       <nav className="p-4 border-b flex gap-4 items-center">
         <NavLink to="/">Summary</NavLink>
         <NavLink to="/transactions">Transactions</NavLink>
-        <NavLink to="/budgets">Budgets</NavLink> {/* ← NEW */}
+        <NavLink to="/budgets">Budgets</NavLink>
+          <NavLink to="/categories">Categories</NavLink>
+
         <button className="ml-auto" onClick={logout}>
           Log out
         </button>

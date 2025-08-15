@@ -1,148 +1,119 @@
+// src/features/budgets/BudgetsPage.tsx
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listBudgets,
   createBudget,
+  updateBudget,
   deleteBudget,
-  updateBudget, // 👈 make sure this exists in ./api
   type Budget,
+  type BudgetPayload,
 } from "./api";
-import { fetchCategories as listCategories } from "../categories/api";
+import { fetchCategories, type CategoryDTO } from "../categories/api";
 
 export default function BudgetsPage() {
   const qc = useQueryClient();
 
-  // Budgets
-
-  const { data: budgetsRaw, isLoading: budgetsLoading, error: budgetsError } = useQuery({
+  // Fetch budgets
+  const { data: budgets = [], isLoading: budgetsLoading, error: budgetsError } = useQuery({
     queryKey: ["budgets"],
-    queryFn: listBudgets, // can return array or paginated object
+    queryFn: () => listBudgets(),
   });
 
-  const budgets = Array.isArray(budgetsRaw) ? budgetsRaw : budgetsRaw?.results ?? [];
-
-  // Categories (for lookup + selects)
-  const {
-    data: categories = [],
-    isLoading: catsLoading,
-    error: catsError,
-  } = useQuery<Category[]>({ queryKey: ["categories"], queryFn: listCategories });
-
-  // Map id -> name
-  const catMap = useMemo(
-    () => new Map<number, string>(categories.map((c) => [c.id, c.name])),
-    [categories]
-  );
-  const catName = (id?: number | string) => {
-    if (id == null) return "";
-    const num = typeof id === "string" ? parseInt(id, 10) : id;
-    return catMap.get(num) ?? `#${id}`;
-  };
-
-  // Create form state
-  const [form, setForm] = useState<{ category?: number; limit: string; period: "M" | "Y" }>({
-    category: undefined,
-    limit: "",
-    period: "M",
+  // Fetch categories (so we can show names and power the form)
+  const { data: categories = [], isLoading: catsLoading, error: catsError } = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => fetchCategories(),
   });
 
+  const catNameById = useMemo(() => {
+    const m = new Map<number, string>();
+    (categories as CategoryDTO[]).forEach((c) => m.set(c.id, c.name));
+    return m;
+  }, [categories]);
+
+  // Form state
+  const [form, setForm] = useState<BudgetPayload>({ category: 0, limit: "", period: "M" });
+  const [editing, setEditing] = useState<Budget | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Mutations
   const createMut = useMutation({
-    mutationFn: () =>
-      createBudget({
-        category: form.category!,
-        limit: form.limit,
-        period: form.period,
-      }),
+    mutationFn: (payload: BudgetPayload) => createBudget(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["budgets"] });
-      setForm({ category: undefined, limit: "", period: "M" });
+      setForm({ category: 0, limit: "", period: "M" });
+      setErrorMsg(null);
     },
+    onError: async (err: any) => setErrorMsg(err?.message ?? "Create failed"),
   });
 
-  const delMut = useMutation({
+  const updateMut = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: Partial<BudgetPayload> }) =>
+      updateBudget(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["budgets"] });
+      setEditing(null);
+      setForm({ category: 0, limit: "", period: "M" });
+      setErrorMsg(null);
+    },
+    onError: async (err: any) => setErrorMsg(err?.message ?? "Update failed"),
+  });
+
+  const deleteMut = useMutation({
     mutationFn: (id: number) => deleteBudget(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
   });
 
-  // ---------------- Edit support ----------------
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<{ category?: number; limit: string; period: "M" | "Y" }>({
-    category: undefined,
-    limit: "",
-    period: "M",
-  });
-  const [editError, setEditError] = useState<string | null>(null);
-
-  const beginEdit = (b: Budget) => {
-    setEditingId(b.id);
-    setEditError(null);
-    setEditForm({
-      category: typeof b.category === "string" ? parseInt(b.category, 10) : (b.category as number),
-      limit: String(b.limit),
-      period: b.period,
-    });
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    if (editing) {
+      updateMut.mutate({
+        id: editing.id,
+        payload: {
+          category: form.category,
+          limit: form.limit,
+          period: form.period,
+        },
+      });
+    } else {
+      createMut.mutate(form);
+    }
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditError(null);
+  const onEdit = (b: Budget) => {
+    setEditing(b);
+    setForm({ category: b.category, limit: String(b.limit), period: b.period });
   };
 
-  const updateMut = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { category: number; limit: string; period: "M" | "Y" } }) =>
-      updateBudget(id, payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["budgets"] });
-      setEditingId(null);
-      setEditError(null);
-    },
-    onError: async (err: any) => {
-      // Try to surface the server message (e.g. uniqueness error)
-      const msg =
-        err?.message ??
-        (typeof err === "string" ? err : "Update failed");
-      setEditError(msg);
-    },
-  });
-
-  const saveEdit = (id: number) => {
-    if (!editForm.category) return;
-    updateMut.mutate({ id, payload: { category: editForm.category, limit: editForm.limit, period: editForm.period } });
+  const onCancel = () => {
+    setEditing(null);
+    setForm({ category: 0, limit: "", period: "M" });
+    setErrorMsg(null);
   };
-
-  // ----------------------------------------------
 
   if (budgetsLoading || catsLoading) return <div>Loading…</div>;
-  if (budgetsError) return <div>Failed to load budgets.</div>;
-  if (catsError) return <div>Failed to load categories.</div>;
+  if (budgetsError) return <div className="text-red-600">Failed to load budgets.</div>;
+  if (catsError) return <div className="text-red-600">Failed to load categories.</div>;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-bold">Budgets</h1>
+    <div>
+      <h1 className="text-xl font-bold mb-4">Budgets</h1>
 
-      {/* Create budget */}
-      <form
-        className="flex flex-wrap gap-2 items-end"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!form.category) return;
-          createMut.mutate();
-        }}
-      >
+      <form onSubmit={onSubmit} className="mb-6 flex gap-2 items-end">
         <div>
           <label className="block text-sm mb-1">Category</label>
           <select
             className="border rounded px-2 py-1"
-            value={form.category ?? ""}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, category: e.target.value ? Number(e.target.value) : undefined }))
-            }
+            value={form.category}
+            onChange={(e) => setForm((f) => ({ ...f, category: Number(e.target.value) }))}
             required
           >
-            <option value="" disabled>
-              Select category…
+            <option value={0} disabled>
+              Select a category…
             </option>
-            {categories.map((c) => (
+            {(categories as CategoryDTO[]).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -151,11 +122,11 @@ export default function BudgetsPage() {
         </div>
 
         <div>
-          <label className="block text-sm mb-1">Limit</label>
+          <label className="block text-sm mb-1">Limit (KES)</label>
           <input
+            className="border rounded px-2 py-1"
             type="number"
             step="0.01"
-            className="border rounded px-2 py-1"
             value={form.limit}
             onChange={(e) => setForm((f) => ({ ...f, limit: e.target.value }))}
             required
@@ -176,147 +147,62 @@ export default function BudgetsPage() {
 
         <button
           type="submit"
-          className="ml-2 px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-50"
-          disabled={createMut.isPending}
+          className="px-3 py-2 rounded bg-blue-600 text-white"
+          disabled={createMut.isPending || updateMut.isPending}
         >
-          {createMut.isPending ? "Creating…" : "Create"}
+          {editing ? "Update" : "Create"}
         </button>
-        {createMut.isError ? (
-          <span className="text-red-600 text-sm">
-            {(createMut.error as Error)?.message ?? "Create failed"}
-          </span>
-        ) : null}
+        {editing && (
+          <button type="button" className="px-3 py-2 rounded border" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+        {errorMsg && <div className="text-red-600 ml-2">{errorMsg}</div>}
       </form>
 
-      {/* Budgets table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-[780px] w-full border-collapse">
-          <thead>
-            <tr className="text-left border-b">
-              <th className="py-2 pr-4">Category</th>
-              <th className="py-2 pr-4">Limit</th>
-              <th className="py-2 pr-4">Period</th>
-              <th className="py-2 pr-4">Spent</th>
-              <th className="py-2 pr-4">Remaining</th>
-              <th className="py-2 pr-4">Used</th>
-              <th className="py-2 pr-4">Actions</th>
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b text-left">
+            <th className="py-2 pr-2">Category</th>
+            <th className="py-2 pr-2">Limit</th>
+            <th className="py-2 pr-2">Spent</th>
+            <th className="py-2 pr-2">Remaining</th>
+            <th className="py-2 pr-2">Used %</th>
+            <th className="py-2 pr-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {budgets.map((b) => (
+            <tr key={b.id} className="border-b">
+              <td className="py-2 pr-2">{catNameById.get(b.category) ?? b.category}</td>
+              <td className="py-2 pr-2">{b.limit}</td>
+              <td className="py-2 pr-2">{b.amount_spent ?? b.spent ?? "0.00"}</td>
+              <td className="py-2 pr-2">{b.remaining ?? ""}</td>
+              <td className="py-2 pr-2">
+                {typeof b.percent_used === "number" ? b.percent_used.toFixed(1) : ""}
+              </td>
+              <td className="py-2 pr-2 flex gap-2">
+                <button className="px-2 py-1 border rounded" onClick={() => onEdit(b)}>
+                  Edit
+                </button>
+                <button
+                  className="px-2 py-1 border rounded text-red-600"
+                  onClick={() => deleteMut.mutate(b.id)}
+                >
+                  Delete
+                </button>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {budgets.map((b) => {
-              const isEditing = editingId === b.id;
-
-              if (isEditing) {
-                return (
-                  <tr key={b.id} className="border-b align-top">
-                    <td className="py-2 pr-4">
-                      <select
-                        className="border rounded px-2 py-1"
-                        value={editForm.category ?? ""}
-                        onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            category: e.target.value ? Number(e.target.value) : undefined,
-                          }))
-                        }
-                        required
-                      >
-                        <option value="" disabled>
-                          Select category…
-                        </option>
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-2 pr-4">
-                      <input
-                        type="number"
-                        step="0.01"
-                        className="border rounded px-2 py-1 w-28"
-                        value={editForm.limit}
-                        onChange={(e) => setEditForm((f) => ({ ...f, limit: e.target.value }))}
-                        required
-                      />
-                    </td>
-                    <td className="py-2 pr-4">
-                      <select
-                        className="border rounded px-2 py-1"
-                        value={editForm.period}
-                        onChange={(e) => setEditForm((f) => ({ ...f, period: e.target.value as "M" | "Y" }))}
-                      >
-                        <option value="M">Monthly</option>
-                        <option value="Y">Yearly</option>
-                      </select>
-                    </td>
-                    <td className="py-2 pr-4">{b.amount_spent ?? "0.00"}</td>
-                    <td className="py-2 pr-4">{b.remaining ?? "0.00"}</td>
-                    <td className="py-2 pr-4">
-                      {b.percent_used != null ? `${b.percent_used.toFixed(1)}%` : "0%"}
-                    </td>
-                    <td className="py-2 pr-4 space-x-2">
-                      <button
-                        className="px-2 py-1 rounded bg-green-600 text-white disabled:opacity-50"
-                        onClick={() => saveEdit(b.id)}
-                        disabled={updateMut.isPending}
-                      >
-                        {updateMut.isPending ? "Saving…" : "Save"}
-                      </button>
-                      <button
-                        className="px-2 py-1 rounded bg-gray-300"
-                        onClick={cancelEdit}
-                        disabled={updateMut.isPending}
-                      >
-                        Cancel
-                      </button>
-                      {editError && (
-                        <div className="text-red-600 text-sm mt-1">{editError}</div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              }
-
-              return (
-                <tr key={b.id} className="border-b">
-                  <td className="py-2 pr-4">{catName(b.category)}</td>
-                  <td className="py-2 pr-4">{b.limit}</td>
-                  <td className="py-2 pr-4">{b.period === "M" ? "Monthly" : "Yearly"}</td>
-                  <td className="py-2 pr-4">{b.amount_spent ?? "0.00"}</td>
-                  <td className="py-2 pr-4">{b.remaining ?? "0.00"}</td>
-                  <td className="py-2 pr-4">
-                    {b.percent_used != null ? `${b.percent_used.toFixed(1)}%` : "0%"}
-                  </td>
-                  <td className="py-2 pr-4 space-x-2">
-                    <button
-                      className="px-2 py-1 rounded bg-blue-600 text-white"
-                      onClick={() => beginEdit(b)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="px-2 py-1 rounded bg-red-600 text-white disabled:opacity-50"
-                      onClick={() => delMut.mutate(b.id)}
-                      disabled={delMut.isPending}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-            {budgets.length === 0 && (
-              <tr>
-                <td className="py-4 text-gray-500" colSpan={7}>
-                  No budgets yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+          ))}
+          {budgets.length === 0 && (
+            <tr>
+              <td colSpan={6} className="py-6 text-center text-gray-500">
+                No budgets yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
