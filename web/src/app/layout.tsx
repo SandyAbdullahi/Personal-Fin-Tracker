@@ -1,6 +1,6 @@
 // src/app/Layout.tsx
 import { Outlet, NavLink } from "react-router-dom";
-import { useAuth } from "../lib/auth/AuthContext"; // ensure this path matches your project
+import { useAuth } from "../lib/auth/AuthContext";
 
 export default function Layout() {
   const { logout } = useAuth();
@@ -10,11 +10,9 @@ export default function Layout() {
         <NavLink to="/">Summary</NavLink>
         <NavLink to="/transactions">Transactions</NavLink>
         <NavLink to="/budgets">Budgets</NavLink>
-          <NavLink to="/categories">Categories</NavLink>
-
-        <button className="ml-auto" onClick={logout}>
-          Log out
-        </button>
+        <NavLink to="/categories">Categories</NavLink>
+        <NavLink to="/transfers">Transfers</NavLink> {/* ← NEW */}
+        <button className="ml-auto" onClick={logout}>Log out</button>
       </nav>
       <main className="p-4">
         <Outlet />

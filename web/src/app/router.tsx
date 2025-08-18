@@ -10,6 +10,7 @@ const SummaryPage = lazy(() => import("../features/summary/SummaryPage"));
 const TransactionsPage = lazy(() => import("../features/transactions/TransactionsPage"));
 const BudgetsPage = lazy(() => import("../features/budgets/BudgetsPage"));
 const CategoriesPage = lazy(() => import("../features/categories/CategoriesPage"));
+const TransfersPage = lazy(() => import("../features/transfers/TransfersPage")); // ← NEW
 
 const Fallback = <div className="p-4 text-sm text-gray-500">Loading…</div>;
 
@@ -57,6 +58,16 @@ export const router = createBrowserRouter([
           <ProtectedRoute>
             <Suspense fallback={Fallback}>
               <CategoriesPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "transfers", // ← NEW
+        element: (
+          <ProtectedRoute>
+            <Suspense fallback={Fallback}>
+              <TransfersPage />
             </Suspense>
           </ProtectedRoute>
         ),

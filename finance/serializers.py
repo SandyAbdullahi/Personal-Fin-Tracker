@@ -229,8 +229,14 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
 # ───────────────────────────────── 4. Budgets ─────────────────────────────────
 
 
+# finance/serializers.py → BudgetSerializer
 class BudgetSerializer(serializers.ModelSerializer):
-    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.none())
+    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
+    amount_spent = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True, source="spent")
+    remaining = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    percent_used = serializers.FloatField(read_only=True)
+    net_transfer = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    effective_limit = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = Budget
@@ -239,11 +245,13 @@ class BudgetSerializer(serializers.ModelSerializer):
             "category",
             "limit",
             "period",
-            "amount_spent",
+            "amount_spent",  # from spent annotate
+            "net_transfer",  # +in −out
+            "effective_limit",  # limit + net_transfer
             "remaining",
             "percent_used",
         ]
-        read_only_fields = ["id", "amount_spent", "remaining", "percent_used"]
+        read_only_fields = ["id", "amount_spent", "net_transfer", "effective_limit", "remaining", "percent_used"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

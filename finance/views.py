@@ -93,7 +93,7 @@ def summary(request):
         ?start=YYYY-MM-DD   – from date
         ?end=YYYY-MM-DD     – up to date
     """
-    qs = Transaction.objects.filter(user=request.user, transfer__isnull=True)  # ← ignore transfers
+    qs = Transaction.objects.filter(user=request.user, transfer__isnull=True)  # ⬅️ exclude transfers
 
     start = request.GET.get("start")
     end = request.GET.get("end")
@@ -151,13 +151,13 @@ class BudgetViewSet(viewsets.ModelViewSet):
         user = self.request.user
         today = timezone.localdate()
 
-        # sub-query → total expenses in this category for the current month
-        monthly_total = (
+        # real expenses this month (exclude transfer-created rows)
+        monthly_spent = (
             Transaction.objects.filter(
                 user=OuterRef("user"),
                 category=OuterRef("category"),
                 type="EX",
-                transfer__isnull=True,  # ignore transfers in budgets
+                transfer__isnull=True,  # ⬅️ exclude transfers
                 date__year=today.year,
                 date__month=today.month,
             )
@@ -166,25 +166,65 @@ class BudgetViewSet(viewsets.ModelViewSet):
             .values("total")[:1]
         )
 
-        spent_expr = Coalesce(
-            Subquery(
-                monthly_total,
-                output_field=DecimalField(max_digits=10, decimal_places=2),
-            ),
+        # inbound reallocations this month
+        in_qs = (
+            Transfer.objects.filter(
+                user=OuterRef("user"),
+                destination_category=OuterRef("category"),
+                date__year=today.year,
+                date__month=today.month,
+            )
+            .values("destination_category")
+            .annotate(total=Sum("amount"))
+            .values("total")[:1]
+        )
+
+        # outbound reallocations this month
+        out_qs = (
+            Transfer.objects.filter(
+                user=OuterRef("user"),
+                source_category=OuterRef("category"),
+                date__year=today.year,
+                date__month=today.month,
+            )
+            .values("source_category")
+            .annotate(total=Sum("amount"))
+            .values("total")[:1]
+        )
+
+        spent = Coalesce(
+            Subquery(monthly_spent, output_field=DecimalField(max_digits=10, decimal_places=2)),
+            Value(Decimal("0.00")),
+        )
+        in_amt = Coalesce(
+            Subquery(in_qs, output_field=DecimalField(max_digits=10, decimal_places=2)),
+            Value(Decimal("0.00")),
+        )
+        out_amt = Coalesce(
+            Subquery(out_qs, output_field=DecimalField(max_digits=10, decimal_places=2)),
             Value(Decimal("0.00")),
         )
 
+        net_transfer = ExpressionWrapper(in_amt - out_amt, output_field=DecimalField(max_digits=10, decimal_places=2))
+        effective_limit = ExpressionWrapper(
+            F("limit") + net_transfer, output_field=DecimalField(max_digits=10, decimal_places=2)
+        )
+        remaining = ExpressionWrapper(
+            effective_limit - spent, output_field=DecimalField(max_digits=10, decimal_places=2)
+        )
+
+        # Avoid divide-by-zero in percent_used
+        percent_used = ExpressionWrapper(
+            (spent * Value(Decimal("100.00"))) / Coalesce(effective_limit, Value(Decimal("1.00"))),
+            output_field=FloatField(),
+        )
+
         return Budget.objects.filter(user=user).annotate(
-            amount_spent=spent_expr,  # ← add this
-            spent=spent_expr,  # ← keep alias for ordering=spent if used
-            remaining=ExpressionWrapper(
-                F("limit") - spent_expr,
-                output_field=DecimalField(max_digits=10, decimal_places=2),
-            ),
-            percent_used=ExpressionWrapper(
-                spent_expr * Value(Decimal("100.00")) / F("limit"),
-                output_field=FloatField(),
-            ),
+            spent=spent,
+            net_transfer=net_transfer,
+            effective_limit=effective_limit,
+            remaining=remaining,
+            percent_used=percent_used,
         )
 
     # ------------------------------------------------------------------ #
