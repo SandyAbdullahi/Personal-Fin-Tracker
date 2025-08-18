@@ -59,10 +59,9 @@ class TransactionSerializer(serializers.ModelSerializer):
 
     def _resolve_category(self, value):
         """
-        Resolve by PK without raising Http404. If a user is present in context,
-        ensure the category belongs to them; otherwise raise ValidationError.
+        Resolve by PK or instance. If a user is present in context,
+        ensure the category belongs to them.
         """
-        # allow instance or integer
         cat = value if isinstance(value, Category) else Category.objects.filter(pk=value).first()
         if not cat:
             raise serializers.ValidationError("Invalid category.")
@@ -83,7 +82,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Amount must be positive.")
         return value
 
-    # create hook
+    # create
     def create(self, validated: Dict[str, Any]):
         cat = validated.pop("category", None) or validated.pop("category_id", None)
         validated["category_id"] = cat.pk if hasattr(cat, "pk") else cat
@@ -93,31 +92,28 @@ class TransactionSerializer(serializers.ModelSerializer):
             validated["user"] = request.user
         return super().create(validated)
 
-    def to_representation(self, instance: Transaction):
-        rep = super().to_representation(instance)
-        rep["category_id"] = instance.category_id
-        rep.pop("category", None)
-        return rep
-
+    # update (supports category/category_id)
     def update(self, instance, validated_data):
-        # Support either alias from the PATCH payload
         cat_obj = validated_data.pop("category", None) or validated_data.pop("category_id", None)
         if cat_obj is not None:
-            # Accept Category instance *or* raw id
             instance.category_id = cat_obj.pk if hasattr(cat_obj, "pk") else cat_obj
 
-        # Update the rest, if present
         for field in ("amount", "type", "description", "date"):
             if field in validated_data:
                 setattr(instance, field, validated_data[field])
 
-        # (Optional) re-stamp user if request exists
         request = self.context.get("request")
         if request and getattr(request.user, "is_authenticated", False):
             instance.user = request.user
 
         instance.save()
         return instance
+
+    def to_representation(self, instance: Transaction):
+        rep = super().to_representation(instance)
+        rep["category_id"] = instance.category_id
+        rep.pop("category", None)
+        return rep
 
 
 # ──────────────────────────────── Category ────────────────────────────
@@ -229,9 +225,9 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
 # ───────────────────────────────── 4. Budgets ─────────────────────────────────
 
 
-# finance/serializers.py → BudgetSerializer
 class BudgetSerializer(serializers.ModelSerializer):
     category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
+    # expose the annotated "spent" as amount_spent
     amount_spent = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True, source="spent")
     remaining = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     percent_used = serializers.FloatField(read_only=True)
@@ -245,17 +241,24 @@ class BudgetSerializer(serializers.ModelSerializer):
             "category",
             "limit",
             "period",
-            "amount_spent",  # from spent annotate
+            "amount_spent",  # from "spent" annotation
             "net_transfer",  # +in −out
-            "effective_limit",  # limit + net_transfer
+            "effective_limit",
             "remaining",
             "percent_used",
         ]
-        read_only_fields = ["id", "amount_spent", "net_transfer", "effective_limit", "remaining", "percent_used"]
+        read_only_fields = [
+            "id",
+            "amount_spent",
+            "net_transfer",
+            "effective_limit",
+            "remaining",
+            "percent_used",
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # figure out the user from context (views/tests both supported)
+        # Restrict category choices to the current user
         req = self.context.get("request")
         user = req.user if req and getattr(req, "user", None) else self.context.get("request_user")
         self.fields["category"].queryset = Category.objects.filter(user=user) if user else Category.objects.none()
@@ -293,7 +296,6 @@ class BudgetSerializer(serializers.ModelSerializer):
         # remaining may be annotated or computed property
         remaining_val = getattr(instance, "remaining", None)
         if remaining_val is None:
-            # fallback compute if needed
             amt = getattr(instance, "amount_spent", None)
             if amt is None:
                 amt = spent_val
@@ -307,14 +309,19 @@ class BudgetSerializer(serializers.ModelSerializer):
 
 
 class DebtSerializer(serializers.ModelSerializer):
+    balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
     class Meta:
         model = Debt
         fields = [
             "id",
             "name",
             "principal",
-            "balance",
             "interest_rate",
+            "minimum_payment",
+            "opened_date",
+            "category",
+            "balance",
         ]
         read_only_fields = ["id", "balance"]
 
@@ -323,15 +330,28 @@ class DebtSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Principal must be positive.")
         return value
 
+    def validate_interest_rate(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Interest rate cannot be negative.")
+        return value
+
+    def validate_minimum_payment(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Minimum payment cannot be negative.")
+        return value
+
     def create(self, validated):
         validated["user"] = self.context["request"].user
         return super().create(validated)
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    # Optional memo supported by the model (blank allowed)
+    memo = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = Payment
-        fields = ["id", "debt", "amount", "date"]
+        fields = ["id", "debt", "amount", "date", "memo"]
         read_only_fields = ["id"]
 
     def validate_amount(self, value):
@@ -341,6 +361,8 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def create(self, validated):
         request_user = self.context["request"].user
+
+        # Ensure the debt exists and belongs to the user
         debt_value = validated["debt"]
         debt_pk = getattr(debt_value, "pk", debt_value)
         debt = get_object_or_404(Debt, pk=debt_pk, user=request_user)
@@ -453,9 +475,8 @@ class TransferSerializer(serializers.ModelSerializer):
     def update(self, instance: Transfer, validated: Dict[str, Any]) -> Transfer:
         """
         Sync the two linked transactions on any change.
-        Heal if one is missing; prune extras if somehow present.
+        Heal if one is missing; prune extras if present.
         """
-        # Resolve new values, defaulting to existing instance values
         src = validated.get("source_category", instance.source_category)
         dst = validated.get("destination_category", instance.destination_category)
         amount = validated.get("amount", instance.amount)
@@ -475,7 +496,6 @@ class TransferSerializer(serializers.ModelSerializer):
             txs = list(instance.transactions.all())
 
             def upsert(kind: str, category: Category) -> Transaction:
-                # Try to find an existing tx of the given kind
                 for tx in txs:
                     if tx.type == kind:
                         tx.category = category
@@ -485,7 +505,6 @@ class TransferSerializer(serializers.ModelSerializer):
                         tx.user = instance.user
                         tx.save()
                         return tx
-                # Missing -> create it
                 return Transaction.objects.create(
                     user=instance.user,
                     category=category,
@@ -499,7 +518,7 @@ class TransferSerializer(serializers.ModelSerializer):
             tx_out = upsert("EX", src)
             tx_in = upsert("IN", dst)
 
-            # If any extra/stray transactions are linked, remove them
+            # Remove any extras
             instance.transactions.exclude(pk__in=[tx_out.pk, tx_in.pk]).delete()
 
         return instance
