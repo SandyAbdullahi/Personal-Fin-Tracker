@@ -7,6 +7,8 @@ import router from "./app/router"; // or { router } if named
 import { AuthProvider } from "./lib/auth/AuthContext"; // <-- correct path
 import "./index.css";
 import "./App.css";
+import { Toaster } from "react-hot-toast";
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +26,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <RouterProvider router={router} />
+        <Toaster position="top-center"/>
       </AuthProvider>
     </QueryClientProvider>
   </React.StrictMode>
