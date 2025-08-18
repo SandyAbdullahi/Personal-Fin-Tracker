@@ -155,8 +155,8 @@ export default function CategoriesPage() {
         <table className="min-w-[480px] w-full border">
           <thead className="bg-black-50">
             <tr>
-              <th className="text-left p-2 border-b">ID</th>
-              <th className="text-left p-2 border-b">Name</th>
+              {/*<th className="text-left p-2 border-b">ID</th>*/}
+              <th className="text-left p-2 border-b text-center">Name</th>
               <th className="text-left p-2 border-b w-48">Actions</th>
             </tr>
           </thead>
@@ -170,7 +170,7 @@ export default function CategoriesPage() {
             ) : (
               filtered.map((cat) => (
                 <tr key={cat.id} className="border-b">
-                  <td className="p-2 align-middle text-gray-600">{cat.id}</td>
+                  {/*<td className="p-2 align-middle text-gray-600">{cat.id}</td>*/}
                   <td className="p-2">
                     {editingId === cat.id ? (
                       <input

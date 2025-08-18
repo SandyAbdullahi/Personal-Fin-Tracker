@@ -1,6 +1,8 @@
 // src/features/debts/DebtsPage.tsx
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+
 import {
   listDebts,
   createDebt,
@@ -10,20 +12,22 @@ import {
   type DebtDTO,
   type DebtPayload,
 } from "./api";
+
 import AddPaymentDialog from "./AddPaymentDialog";
-import PaymentsList from "./PaymentsList"; // ← NEW
-import toast from "react-hot-toast";
+import PaymentsList from "./PaymentsList";
 
 export default function DebtsPage() {
   const qc = useQueryClient();
 
-  const { data, isLoading, isError } = useQuery({
+  // ── Load debts ──────────────────────────────────────────────────────────
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["debts"],
     queryFn: listDebts,
     staleTime: 15_000,
   });
   const debts: DebtDTO[] = useMemo(() => data?.results ?? [], [data]);
 
+  // ── Create debt form state ──────────────────────────────────────────────
   const [form, setForm] = useState<DebtPayload>({
     name: "",
     principal: "",
@@ -32,6 +36,7 @@ export default function DebtsPage() {
     opened_date: "",
   });
 
+  // ── Mutations: create / update / delete debts ───────────────────────────
   const createMut = useMutation({
     mutationFn: createDebt,
     onSuccess: () => {
@@ -45,7 +50,7 @@ export default function DebtsPage() {
       qc.invalidateQueries({ queryKey: ["debts"] });
       toast.success("Debt created");
     },
-    onError: (e: any) => toast.error(e.message ?? "Create failed"),
+    onError: (e: any) => toast.error(e?.message ?? "Create failed"),
   });
 
   const updateMut = useMutation({
@@ -55,7 +60,7 @@ export default function DebtsPage() {
       qc.invalidateQueries({ queryKey: ["debts"] });
       toast.success("Debt updated");
     },
-    onError: (e: any) => toast.error(e.message ?? "Update failed"),
+    onError: (e: any) => toast.error(e?.message ?? "Update failed"),
   });
 
   const deleteMut = useMutation({
@@ -64,10 +69,10 @@ export default function DebtsPage() {
       qc.invalidateQueries({ queryKey: ["debts"] });
       toast.success("Debt deleted");
     },
-    onError: (e: any) => toast.error(e.message ?? "Delete failed"),
+    onError: (e: any) => toast.error(e?.message ?? "Delete failed"),
   });
 
-  // Modal-style payment (kept from your version)
+  // ── Payments modal (optional, kept from your version) ───────────────────
   const [payDebt, setPayDebt] = useState<DebtDTO | null>(null);
   const paymentMut = useMutation({
     mutationFn: createPayment,
@@ -75,18 +80,22 @@ export default function DebtsPage() {
       qc.invalidateQueries({ queryKey: ["debts"] });
       toast.success("Payment recorded");
     },
-    onError: (e: any) => toast.error(e.message ?? "Payment failed"),
+    onError: (e: any) => toast.error(e?.message ?? "Payment failed"),
   });
 
-  // Expand/collapse state for per-debt payments list
+  // ── Expand/collapse a debt's payments table ─────────────────────────────
   const [openId, setOpenId] = useState<number | null>(null);
 
   return (
     <div className="space-y-6">
       <header className="flex items-end gap-3">
         <h1 className="text-xl font-bold">Debts & Payments</h1>
+        <button className="ml-auto px-3 py-1 border rounded" onClick={() => refetch()}>
+          Refresh
+        </button>
       </header>
 
+      {/* Create Debt */}
       <section className="p-3 border rounded space-y-3">
         <h2 className="font-semibold">Create Debt</h2>
         <form
@@ -152,13 +161,14 @@ export default function DebtsPage() {
         </form>
       </section>
 
+      {/* Debts Table */}
       <section className="overflow-x-auto">
         {isLoading ? (
-          <p className="text-sm text-gray-600 p-2">Loading…</p>
+          <p className="text-sm text-black-600 p-2">Loading…</p>
         ) : isError ? (
           <p className="text-sm text-red-600 p-2">Failed to load debts.</p>
         ) : debts.length === 0 ? (
-          <p className="text-sm text-gray-600 p-2">No debts yet.</p>
+          <p className="text-sm text-black-600 p-2">No debts yet.</p>
         ) : (
           <table className="min-w-[820px] w-full border">
             <thead className="bg-black-50">
@@ -172,7 +182,7 @@ export default function DebtsPage() {
               </tr>
             </thead>
 
-            {/* We wrap each debt's main row + details row in a <tbody> to keep valid tables */}
+            {/* For valid markup, group each row + details in its own <tbody> */}
             {debts.map((d) => (
               <tbody key={d.id}>
                 <DebtRow
@@ -288,7 +298,7 @@ function DebtRow({
           d.minimum_payment
         )}
       </td>
-      <td className="flex gap-2">
+      <td className="flex flex-wrap gap-2">
         {editing ? (
           <>
             <button
@@ -300,10 +310,7 @@ function DebtRow({
             >
               Save
             </button>
-            <button
-              className="px-2 py-1 border rounded"
-              onClick={() => setEditing(false)}
-            >
+            <button className="px-2 py-1 border rounded" onClick={() => setEditing(false)}>
               Cancel
             </button>
           </>
