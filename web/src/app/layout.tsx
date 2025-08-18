@@ -11,8 +11,10 @@ export default function Layout() {
         <NavLink to="/transactions">Transactions</NavLink>
         <NavLink to="/budgets">Budgets</NavLink>
         <NavLink to="/categories">Categories</NavLink>
-        <NavLink to="/transfers">Transfers</NavLink> {/* ← NEW */}
-        <button className="ml-auto" onClick={logout}>Log out</button>
+        <NavLink to="/goals">Goals</NavLink> {/* ← new */}
+        <button className="ml-auto" onClick={logout}>
+          Log out
+        </button>
       </nav>
       <main className="p-4">
         <Outlet />
